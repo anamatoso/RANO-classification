@@ -1,3 +1,6 @@
+""" Auxilliary file with utils functions
+"""
+
 import os
 import subprocess as sub
 
@@ -9,7 +12,7 @@ import torch
 from IPython.display import display
 from ipywidgets import HBox, IntSlider, Layout, interactive
 from monai.data.meta_tensor import MetaTensor
-from monai.transforms import *
+from monai.transforms import Compose, LoadImaged, NormalizeIntensityd, SubtractItemsd, RandFlipd, RandScaleIntensityd, RandAdjustContrastd, RandGaussianNoised, ConcatItemsd, DeleteItemsd
 from nipype.interfaces.image import Reorient
 
 
@@ -20,22 +23,22 @@ def plot_slices(images):
     Args:
         images (list): list of images to be plotted overlayed (maximum is 3)
     """
-    if len(images)>3:
+    if len(images) > 3:
         raise Exception("You can only plot a maximum of 3 images overlaid.")
     
     fig, axes = plt.subplots(nrows=3, ncols=3)
     axes = axes.flatten()  
 
     # Define colormap and transparencies of images
-    cmaps=["gray","hot", "cubehelix"]
-    alphas=[1,0.5,0.5]
+    cmaps = ["gray", "hot", "cubehelix"]
+    alphas = [1, 0.5, 0.5]
 
     # Iterate through images
     for i,image in enumerate(images):
         # Load image data and get its shape
-        image=nib.load(image)
-        data=image.get_fdata()
-        shape=np.shape(data)
+        image = nib.load(image)
+        data = image.get_fdata()
+        shape = np.shape(data)
 
         # Define slices to plot
         slice_0 = data[shape[0]//3, :, :]
@@ -55,16 +58,16 @@ def plot_slices(images):
         # Plot each slice and create titles and ylabels
         for j, slice in enumerate(slices):
             axes[j].imshow(slice.T, cmap=cmaps[i], origin="lower",alpha=alphas[i])
-            if j==0:
+            if j == 0:
                 axes[j].set(ylabel="1/3")
                 axes[j].set(title="Sagital")
-            elif j==1:
+            elif j == 1:
                 axes[j].set(title="Coronal")
-            elif j==2:
+            elif j == 2:
                 axes[j].set(title="Axial")
-            elif j==3:
+            elif j == 3:
                 axes[j].set(ylabel="1/2")
-            elif j==6:
+            elif j == 6:
                 axes[j].set(ylabel="3/4")
 
 def force_delete_file(file):
@@ -104,16 +107,16 @@ def calculate_isotropy(resolution):
                  resolution[2] / resolution[1]]
     return np.mean(ratio_xyz)
 
-def change_datatype(filename,type="uint16"):
+def change_datatype(filename, newtype = "uint16"):
     """This function alters the datatype of an image to the specified one
 
     Args:
         filename (str): path of the image
         type (str, optional): data type to change the image to. Defaults to "uint16".
     """
-    image=nib.load(filename)
-    data=image.get_fdata()
-    newimage = nib.Nifti1Image(data.astype(type), image.affine)
+    image = nib.load(filename)
+    data = image.get_fdata()
+    newimage = nib.Nifti1Image(data.astype(newtype), image.affine)
     nib.save(newimage,filename)
 
 def extract_firstvolume(filename, out_filename=None):
@@ -126,18 +129,18 @@ def extract_firstvolume(filename, out_filename=None):
     Returns:
         new_image: if out_filename is None it will return the image (just the first volume) in the nibabel.nifti1.Nifti1Image format. If out_filename is a valid filename, it will save the image with that path, returning None.
     """
-    image=nib.load(filename)
-    image_data=image.get_fdata()
-    image_data2=image_data[:,:,:,0]
-    new_image=nib.nifti1.Nifti1Image(image_data2,image.affine,image.header)
+    image = nib.load(filename)
+    image_data = image.get_fdata()
+    image_data2 = image_data[:,:,:,0]
+    new_image = nib.nifti1.Nifti1Image(image_data2, image.affine, image.header)
     if out_filename is None:
         return new_image
     else:
         nib.nifti1.save(new_image, out_filename)
-        print("Image saved as "+out_filename)
-        
-def register(static, moving, output_image, type="rigid", out_affine=None):
-    """register_rigid registers the moving image to the static image using a regid transformation (center of mass, translation, rigid). It creates (saves) the output image and optionally created the affine matrix of the transformation.
+        print("Image saved as " + out_filename)
+
+def register(static, moving, output_image, transform_type="rigid", out_affine=None):
+    """register_rigid registers the moving image to the static image using a rigid transformation (center of mass, translation, rigid). It creates (saves) the output image and optionally created the affine matrix of the transformation.
 
     Args:
         static (string): Filename of the image in the space we want to register to.
@@ -145,17 +148,15 @@ def register(static, moving, output_image, type="rigid", out_affine=None):
         output_image (string): Filename of the transformed/registered image.
         out_affine (string, optional): Filename of the affine transformation matrix to be created. Defaults to None in which no file is created (in fact it is but is is deleted).
     """
+
     if out_affine is None:
-        sub.run(["dipy_align_affine", static, moving, "--transform", type, "--out_moved", output_image,"--force"])
-        try:
-            os.remove("affine.txt")
-        except OSError:
-            pass
+        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, "--out_moved", output_image,"--force"], check=False)
+        force_delete_file("affine.txt")
     else:
-        sub.run(["dipy_align_affine", static, moving, "--transform", type, "--out_moved", output_image,"--force","--out_affine",out_affine])
-    
-    change_datatype(output_image,type="uint16")
-    
+        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, "--out_moved", output_image, "--force", "--out_affine", out_affine], check=False)
+
+    change_datatype(output_image)
+
 def apply_transform(static, moving, matrix, output_image):
     """apply_transform applies the transformation matrix to the moving image to register it to the static image space. It creates the transformed image file.
 
@@ -165,29 +166,24 @@ def apply_transform(static, moving, matrix, output_image):
         matrix (string): Filename of the matrix file to be used for the transformation
         output_image (string): Filename of the transformed image.
     """
-    sub.run(["dipy_apply_transform", static, moving, matrix, "--out_file", output_image,"--force"])
-    change_datatype(output_image,type="uint16")
+    sub.run(["dipy_apply_transform", static, moving, matrix, "--out_file", output_image,"--force"], check=False)
+    change_datatype(output_image)
 
-def preprocess(image, output, use_FSL=False, pipeline=1):
+def preprocess(image, output, use_FSL=False):
     """This function preprocessess the image by reorienting it to RAS, then if the user wants to, uses robustFOV to crop the fov. Then, bias field correction and gaussian denoising is applied
 
     Args:
         image (string): input filename of image to apply the preprocessing
         output (string): filename of the image output
-        use_FSL (bool, optional): Whether to use FSL functions (requires the FSL to be installed). Defaults to False.
+        use_FSL (bool, optional): Whether to use FSL functions (requires FSL to be installed). Defaults to False.
     """
  
-    if pipeline == 1: # Pipeline python
+    if not use_FSL: # Pipeline python
         # Reorient image to RAS
         reorient = Reorient(orientation='RAS')
         reorient.inputs.in_file = image
         res = reorient.run()
         reoriented = res.outputs.out_file
-
-        # Use robustFOV if fsl is usable
-        if use_FSL:
-            sub.run(["robustfov", "-i", reoriented, "-r", "temp_reoriented_fov.nii.gz"])
-            reoriented="temp_reoriented_fov.nii.gz"
         
         # Bias field correction
         reoriented_ants = ants.image_read(reoriented)
@@ -200,31 +196,26 @@ def preprocess(image, output, use_FSL=False, pipeline=1):
 
         # Remove Gaussian Noise
         imagedenoise = ants.denoise_image(image_biascorrected, mask, noise_model = "Gaussian")
-        #ants.image_write(imagedenoise, "imagedenoise.nii.gz")
-
-        # Resample image to BRATS grid
-        #resampled = ants.resample_image(imagedenoise,[240,240,155],True,0)
-
 
         # Write image to file
         ants.image_write(imagedenoise, output)
 
         # Save as uint16
-        change_datatype(output,type="uint16")
+        change_datatype(output)
 
         # Delete temporary file
         if os.path.exists(res.outputs.out_file) and res.outputs.out_file!=image:
                 os.remove(res.outputs.out_file)
 
-    elif pipeline == 2: # Pipeline CP
-        sub.run(["fslreorient2std", image, "temp_reoriented.nii.gz"])
-        sub.run(["robustfov", "-i",  "temp_reoriented.nii.gz", "-r", "temp_reoriented_fov.nii.gz"])
-        sub.run(["N4BiasFieldCorrection", "-d", "3", "-i", "temp_reoriented_fov.nii.gz", "-o", "temp_reoriented_fov_bias.nii.gz" ])
-        sub.run(["DenoiseImage", "-d", "3", "-i", "temp_reoriented_fov_bias.nii.gz", "-n", "Gaussian", "-o", "temp_reoriented_fov_bias_denoise.nii.gz"])
+    else: # Pipeline FSL
+        sub.run(["fslreorient2std", image, "temp_reoriented.nii.gz"], check=False)
+        sub.run(["robustfov", "-i",  "temp_reoriented.nii.gz", "-r", "temp_reoriented_fov.nii.gz"], check=False)
+        sub.run(["N4BiasFieldCorrection", "-d", "3", "-i", "temp_reoriented_fov.nii.gz", "-o", "temp_reoriented_fov_bias.nii.gz" ], check=False)
+        sub.run(["DenoiseImage", "-d", "3", "-i", "temp_reoriented_fov_bias.nii.gz", "-n", "Gaussian", "-o", "temp_reoriented_fov_bias_denoise.nii.gz"], check=False)
         resampled = ants.resample_image(ants.image_read("temp_reoriented_fov_bias_denoise.nii.gz"),[240,240,155],True,0)
         ants.image_write(resampled, output)
 
-    
+
     # Remove temporary files
     for file in ["CT1.mat", "T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz", "temp_reoriented.nii.gz", "temp_reoriented_fov_bias.nii.gz", "temp_reoriented_fov_bias_denoise.nii.gz"]:
         force_delete_file(file) 
@@ -243,8 +234,8 @@ def remove_timepoints_rano(all):
         condition = (table_classifyable['RANO'] == c)
         table_classifyable.drop(table_classifyable[condition].index,inplace=True)
 
-    # Remove less than 3 months column true
-    condition = (table_classifyable['LessThan3Months'] == True)
+    # Remove rows where less than 3 months column is true
+    condition = (table_classifyable['LessThan3Months'] is True)
     table_classifyable.drop(table_classifyable[condition].index,inplace=True)
 
     # remove less than 3 months in the rationale column
@@ -291,13 +282,14 @@ def check_files_in_subdirectories(root_dir, target_files):
         root_dir (str): root directory of the folders you want to check
         target_files (list): list of files to check
     """
-    for root, dirs, files in os.walk(root_dir):
-        if root == root_dir: continue
+    for root, _, files in os.walk(root_dir):
+        if root == root_dir: 
+            continue
         for file in target_files:
             if file not in files:
                 print(f"File '{file}' not found in directory: {root}")
 
-def get_data_and_transforms(data_dir, all, classes, subtract):
+def get_data_and_transforms(data_dir, table_all, classes, subtract):
     """This function creates the list of timepoints in which each timepoint has the images necessary and the labels
 
     Args:
@@ -317,7 +309,7 @@ def get_data_and_transforms(data_dir, all, classes, subtract):
         patient, week = timepoint.split('_')                # Get patient and timepoint
         
         # Get RANO value and turn it into logit
-        result = all[(all['Patient'] == patient) & (all['Timepoint'] == week)]
+        result = table_all[(table_all['Patient'] == patient) & (table_all['Timepoint'] == week)]
         if patient == "Patient-043" and week == "week-106":
             continue
         else:
@@ -328,7 +320,7 @@ def get_data_and_transforms(data_dir, all, classes, subtract):
         # Get label and calculate the logit
         label=classes.index(rano)
         labels.append(label)
-        # Turn classes into logits    
+        # Turn classes into logits
         logits = torch.nn.functional.one_hot(torch.tensor(label), num_classes=n_classes)
         
         # Create dictionary to store the timepoint's images and its label
@@ -366,18 +358,15 @@ def get_data_and_transforms(data_dir, all, classes, subtract):
             RandAdjustContrastd(keys=to_subtract_names, prob=0.9),
             RandGaussianNoised(keys=to_subtract_names,prob=0.9),
             ConcatItemsd(keys = to_subtract_names, name = "images"), 
-            DeleteItemsd(keys = image_key_list+to_subtract_names)
-        ])
+            DeleteItemsd(keys = image_key_list+to_subtract_names)])
+        
         transforms_test = Compose([
             LoadImaged(keys = image_key_list, ensure_channel_first = True),
             NormalizeIntensityd(keys = image_key_list, channel_wise = True),
             ]+[SubtractItemsd(keys = to_subtract[i], name = to_subtract_names[i]) for i in range(len(to_subtract))]+
             [ConcatItemsd(keys = to_subtract_names, name = "images"), 
-             DeleteItemsd(keys = image_key_list+to_subtract_names)
-             
-        ])
+             DeleteItemsd(keys = image_key_list+to_subtract_names)])
         num_channels = n_modalities
-        
     else:
         transforms_train = Compose([
             LoadImaged(keys = image_key_list, ensure_channel_first = True),
@@ -422,7 +411,7 @@ def critical_error(y_pred, y):
 
     # Count number of critical errors
     count_errors = 0
-    for i in range(len(y)):
+    for i,_ in enumerate(y):
         value_y = y[i] + 1
         value_ypred = y_pred[i] + 1
 
@@ -443,10 +432,10 @@ def plot_image(image):
         image (string): file path of the image to plot
     """
     # Load data of image
-    if type(image) is str:
+    if isinstance(image, str):
         img = nib.load(image)
         data = img.get_fdata()
-    elif type(image) is MetaTensor:
+    elif isinstance(image, MetaTensor):
         data = image.cpu().numpy()
     else:
         data=image
@@ -460,7 +449,6 @@ def plot_image(image):
         plt.colorbar()
         plt.show()
         
-
     # Interactively select axial slice using a slider
     z_slider = IntSlider(min = 0, max = data.shape[2] - 1, step = 1, value = data.shape[2] // 2, orientation = 'vertical', description = 'Axial slice')
     w = interactive(display_axial_slice, z=z_slider)
@@ -495,162 +483,8 @@ def plot_saliency(image_data, saliency):
         plt.show()
 
     # Interactively select axial slice using a slider
-    z_slider = IntSlider(min = 0, max = image_data.shape[2] - 1, step = 1, value = image_data.shape[2] // 2, orientation = 'vertical', description = 'Axial slice')
+    z_slider = IntSlider(min = 0, max = image_data.shape[2] - 1, step = 1, value = image_data.shape[2] // 2, 
+                         orientation = 'vertical', description = 'Axial slice')
     w = interactive(display_axial_slice, z = z_slider)
-
     box_layout = Layout(align_items = 'center')
-
     display(HBox([w.children[1], w.children[0]], layout = box_layout))
-
-
-# class SubtractItemsd(MapTransform):
-#     """
-#     Concatenate specified items from data dictionary together on the first dim to construct a big array.
-#     Expect all the items are numpy array or PyTorch Tensor or MetaTensor.
-#     Return the first input's meta information when items are MetaTensor.
-#     """
-
-#     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
-
-
-#     def __init__(self, keys: KeysCollection, name: str, dim: int = 0, allow_missing_keys: bool = False) -> None:
-#         """
-#         Args:
-#             keys: keys of the corresponding items to be concatenated together.
-#                 See also: :py:class:`monai.transforms.compose.MapTransform`
-#             name: the name corresponding to the key to store the concatenated data.
-#             dim: on which dimension to concatenate the items, default is 0.
-#             allow_missing_keys: don't raise exception if key is missing.
-#         """
-#         super().__init__(keys, allow_missing_keys)
-#         self.name = name
-#         self.dim = dim
-
-
-
-
-
-#     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> dict[Hashable, NdarrayOrTensor]:
-#         """
-#         Raises:
-#             TypeError: When items in ``data`` differ in type.
-#             TypeError: When the item type is not in ``Union[numpy.ndarray, torch.Tensor, MetaTensor]``.
-
-#         """
-#         d = dict(data)
-#         output = []
-#         data_type = None
-#         if len(self.key_iterator(d))!=2: raise TypeError("You must supply only two keys")
-#         for key in self.key_iterator(d):
-#             if data_type is None:
-#                 data_type = type(d[key])
-#             elif not isinstance(d[key], data_type):
-#                 raise TypeError("All items in data must have the same type.")
-#             output.append(d[key])
-
-#         if len(output) == 0:
-#             return d
-
-#         if data_type is np.ndarray:
-#             d[self.name] = np.subtract(output[0], output[1])
-#         elif issubclass(data_type, torch.Tensor):  # type: ignore
-#             d[self.name] = torch.sub(output[0], output[1])  # type: ignore
-#         else:
-#             raise TypeError(
-#                 f"Unsupported data type: {data_type}, available options are (numpy.ndarray, torch.Tensor, MetaTensor)."
-#             )
-#         return d
-
-### Por Testar
-"""
-    
-def get_activation(name):
-    def hook(model, input, output):
-        activation[name] = output.detach()
-
-    return hook
-
-def plot_feature_maps1(model, example, epoch):
-
-    model.conv1.register_forward_hook(get_activation("conv1"))
-
-    data, _ = example
-    data.unsqueeze_(0)
-    _ = model(data)
-
-    plt.imshow(data.reshape(28, -1))
-    plt.savefig("original_image.pdf")
-
-    k = 0
-    act = activation["conv1"].squeeze()
-    dim = act.size(0)
-    fig, ax = plt.subplots(2, 4, figsize=(12, 8))
-    for i in range(act.size(0) // 3): # no 2 é 4 em vez de 3 e em vez de 2
-        for j in range(act.size(0) // 2):
-            ax[i, j].imshow(act[k].detach().cpu().numpy())
-            k += 1
-            plt.savefig(str(epoch) + "_activation_maps1.pdf")
-
-def plot_feature_maps(model, example, layer, epoch):
-    conv = "conv" + str(layer)  # name of convolution layer
-    model.conv2.register_forward_hook(get_activation(conv))
-    data, _ = example
-    data.unsqueeze_(0)
-    _ = model(data)
-    plt.imshow(data.reshape(28, -1))
-    plt.savefig("original_image.pdf")
-    k = 0
-    act = activation[conv].squeeze()
-    fig, ax = plt.subplots(4, 4, figsize=(12, 8))
-    for i in range(act.size(0) // 4):
-        for j in range(4):
-            activ = act[k].detach().cpu().numpy()
-            ax[i, j].imshow(activ)
-            k += 1
-            plt.savefig(str(epoch) + "_activation_maps_layer_" + str(layer) + ".pdf")
-
-def plot_filters_single_channel(t):
-
-    # kernels depth * number of kernels
-    nplots = t.shape[0] * t.shape[1]
-    ncols = 12
-
-    nrows = 1 + nplots // ncols
-    # convert tensor to numpy image
-    npimg = np.array(t.numpy(), np.float32)
-
-    count = 0
-    fig = plt.figure(figsize=(ncols, nrows))
-
-    # looping through all the kernels in each channel
-    for i in range(t.shape[0]):
-        for j in range(t.shape[1]):
-            count += 1
-            ax1 = fig.add_subplot(nrows, ncols, count)
-            npimg = np.array(t[i, j].numpy(), np.float32)
-            npimg = (npimg - np.mean(npimg)) / np.std(npimg)
-            npimg = np.minimum(1, np.maximum(0, (npimg + 0.5)))
-            ax1.imshow(npimg)
-            ax1.set_title(str(i) + "," + str(j))
-            ax1.axis("off")
-            ax1.set_xticklabels([])
-            ax1.set_yticklabels([])
-
-    plt.tight_layout()
-    plt.show()
-
-def visualize_filters(model, layer_num, single_channel=True, collated=False):
-    # extracting the model features at the particular layer number
-    layer = model.features[layer_num]
-    # checking whether the layer is convolution layer or not
-    if isinstance(layer, nn.Conv2d):
-        # getting the weight tensor data
-        weight_tensor = model.features[layer_num].weight.data
-
-        if single_channel:
-            plot_filters_single_channel(weight_tensor)
-
-
-    else:
-        print("Can only visualize layers which are convolutional")
-"""

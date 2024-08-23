@@ -1,38 +1,42 @@
 #%%
 # Imports
-print("Importing")
 import os
 
-from utils import *
+from utils import (apply_transform, calculate_isotropy, extract_firstvolume,
+                   force_delete_file, get_resolution, preprocess, register)
+
+# Define folders
+ATLAS_FOLDER    = "./atlases"
+LUMIERE_FOLDER  = "./lumiere/data"
+DATA_DIR        = os.path.join(LUMIERE_FOLDER,"data")
+
+MODALITIES=["CT1","T1","T2","FLAIR"]
 
 #%% 
 # Extract first volume of SRI atlases (T1 and T2)
-extract_firstvolume("/home/amatoso/phd/atlases/SRI24_T1_brain.nii",
-                    "/home/amatoso/phd/atlases/sri24_T1_3D.nii.gz")
+extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T1_brain.nii"),
+                    os.path.join(ATLAS_FOLDER,"sri24_T1_3D.nii.gz"))
 
-extract_firstvolume("/home/amatoso/phd/atlases/SRI24_T2_brain.nii",
-                    "/home/amatoso/phd/atlases/sri24_T2_3D.nii.gz")
+extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T2_brain.nii"),
+                    os.path.join(ATLAS_FOLDER,"sri24_T2_3D.nii.gz"))
 
-# Define priority of modalities
-mods=["CT1","T1","T2","FLAIR"]
-
-data_dir="/home/amatoso/phd/lumiere/data"
-
-for patient in [p for p in sorted(os.listdir(data_dir))]:
-    p_dir = os.path.join(data_dir,patient)
+for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
+    p_dir = os.path.join(DATA_DIR,patient)
     for week in [p for p in sorted(os.listdir(p_dir))]:
         print("Doing "+patient+", "+week)
         w_dir = os.path.join(p_dir,week)
 
         # List the modalities the timepoint has and their resolutions
-        available_mods = [item for item in mods if item+".nii.gz" in os.listdir(w_dir)]
-        resolutions= [get_resolution(os.path.join(w_dir,item+".nii.gz")) for item in mods if item+".nii.gz" in os.listdir(w_dir)]
+        available_mods = [item for item in MODALITIES if item+".nii.gz" in os.listdir(w_dir)]
+        resolutions= [get_resolution(os.path.join(w_dir,item+".nii.gz")) for item in available_mods]
 
         ##############################################
         # Do preprocessing in all modalities available
+
         for filename in [os.path.join(w_dir,item)+".nii.gz" for item in available_mods]:
-            if not os.path.exists(filename.replace(".nii.gz","_preproc.nii.gz")):
+            if not os.path.exists(filename.replace(".nii.gz","_preproc.nii.gz")): # Check if preprocessing has already been done and if so do not do it again
                 preprocess(filename, filename.replace(".nii.gz","_preproc.nii.gz"))
+
 
         ##############################################
         # Find the modality that will be the "main" one from which to calculate the transformation to standard space. It will be the most isotropic according to the aspect ratios of the voxel sizes
@@ -48,7 +52,7 @@ for patient in [p for p in sorted(os.listdir(data_dir))]:
             else: # If we already selected one, but it is not isotropic, change to the current one if the current one is more isotropic than the one we have
                 res_chosen_mod=resolutions[available_mods.index(chosen_mod)]
                 res_mod=resolutions[available_mods.index(mod)]
-                if abs(1-calculate_isotropy(res_mod)) < abs(1-calculate_isotropy(res_chosen_mod)): # Compare isotropy
+                if abs(1-calculate_isotropy(res_mod)) < abs(1-calculate_isotropy(res_chosen_mod)): # Compare isotropy and keep the modality that is more isotropic (closer to 1)
                     chosen_mod=mod
 
         if chosen_mod is None: continue # in that week no images were acquired (Note: this never happens)
@@ -59,13 +63,13 @@ for patient in [p for p in sorted(os.listdir(data_dir))]:
         # Register "main" image to standard space and save transformation matrix
 
         print("Registering " + chosen_mod + " to standard space")   
-        if chosen_mod in ["CT1", "T1"]:
+        if chosen_mod in ["CT1", "T1"]: # Register to T1 atlas if the main modality is T1 with or without contrast
             register(static="/home/amatoso/phd/atlases/sri24_T1_3D.nii.gz", 
                            moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"), 
                            output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
                            type="affine", 
                            out_affine=os.path.join(w_dir,"matrix2std.txt"))
-        else:
+        else: # Register to T2 atlas
             register(static="/home/amatoso/phd/atlases/sri24_T2_3D.nii.gz", 
                            moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"), 
                            output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
