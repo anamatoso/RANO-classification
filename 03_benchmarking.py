@@ -59,7 +59,7 @@ def parse_args():
     # Adding arguments
     parser.add_argument('--binary_classes', action = 'store_true', default = False,
                         help = 'a boolean flag for binary classes')
-    parser.add_argument('--mods_keep', nargs = '+', type = validate_mods_keep, default = ["CT1", "T1", "T2", "FLAIR"],
+    parser.add_argument('--mods_keep', type = validate_mods_keep, default = ["CT1", "T1", "T2", "FLAIR"],
                         help = 'a list of strings, defaults to ["CT1", "T1", "T2", "FLAIR"]')
     parser.add_argument('--model_name', type = str, required = True,
                         help = 'the name of the model, mandatory argument')
@@ -501,12 +501,7 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     "Critical Error Rate"   : str(critical_err)}
     return result, real, predicted
 
-
-
-
-
 # %%
-
 
 if __name__ == '__main__':
     arguments = parse_args()
@@ -514,9 +509,7 @@ if __name__ == '__main__':
 
     host           = socket.gethostname() if socket.gethostname() == "pangeia" else "pluto"
     phd_dir        = os.getcwd()
-    dataset        = "rano_CT1_T1_T2_FLAIR_T-1"
-    if arguments.mods_keep != ["CT1", "T1", "T2", "FLAIR"]:
-        dataset        = "rano_"+"_".join(arguments.mods_keep[0])+"_T-1"
+    dataset        = "rano_"+"_".join(arguments.mods_keep)+"_T-1"
     print(dataset)
     classes        = ["PD", "SD", "PR", "CR"]
     num_classes    = len(classes)
