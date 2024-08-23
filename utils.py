@@ -9,10 +9,14 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 import torch
+import torch.nn.functional as F
 from IPython.display import display
 from ipywidgets import HBox, IntSlider, Layout, interactive
 from monai.data.meta_tensor import MetaTensor
-from monai.transforms import Compose, LoadImaged, NormalizeIntensityd, SubtractItemsd, RandFlipd, RandScaleIntensityd, RandAdjustContrastd, RandGaussianNoised, ConcatItemsd, DeleteItemsd
+from monai.transforms import (Compose, ConcatItemsd, DeleteItemsd, LoadImaged,
+                              NormalizeIntensityd, RandAdjustContrastd,
+                              RandFlipd, RandGaussianNoised,
+                              RandScaleIntensityd, SubtractItemsd)
 from nipype.interfaces.image import Reorient
 
 
@@ -24,10 +28,10 @@ def plot_slices(images):
         images (list): list of images to be plotted overlayed (maximum is 3)
     """
     if len(images) > 3:
-        raise Exception("You can only plot a maximum of 3 images overlaid.")
-    
-    fig, axes = plt.subplots(nrows=3, ncols=3)
-    axes = axes.flatten()  
+        raise ValueError("You can only plot a maximum of 3 images overlaid.")
+
+    _, axes = plt.subplots(nrows=3, ncols=3)
+    axes = axes.flatten()
 
     # Define colormap and transparencies of images
     cmaps = ["gray", "hot", "cubehelix"]
@@ -56,8 +60,8 @@ def plot_slices(images):
                 slice_6, slice_7, slice_8]
         
         # Plot each slice and create titles and ylabels
-        for j, slice in enumerate(slices):
-            axes[j].imshow(slice.T, cmap=cmaps[i], origin="lower",alpha=alphas[i])
+        for j, slice_image in enumerate(slices):
+            axes[j].imshow(slice_image.T, cmap=cmaps[i], origin="lower",alpha=alphas[i])
             if j == 0:
                 axes[j].set(ylabel="1/3")
                 axes[j].set(title="Sagital")
@@ -138,6 +142,7 @@ def extract_firstvolume(filename, out_filename=None):
     else:
         nib.nifti1.save(new_image, out_filename)
         print("Image saved as " + out_filename)
+        return
 
 def register(static, moving, output_image, transform_type="rigid", out_affine=None):
     """register_rigid registers the moving image to the static image using a rigid transformation (center of mass, translation, rigid). It creates (saves) the output image and optionally created the affine matrix of the transformation.
@@ -150,10 +155,12 @@ def register(static, moving, output_image, transform_type="rigid", out_affine=No
     """
 
     if out_affine is None:
-        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, "--out_moved", output_image,"--force"], check=False)
+        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, 
+                 "--out_moved", output_image,"--force"], check=False)
         force_delete_file("affine.txt")
     else:
-        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, "--out_moved", output_image, "--force", "--out_affine", out_affine], check=False)
+        sub.run(["dipy_align_affine", static, moving, "--transform", transform_type, 
+                 "--out_moved", output_image, "--force", "--out_affine", out_affine], check=False)
 
     change_datatype(output_image)
 
@@ -166,19 +173,20 @@ def apply_transform(static, moving, matrix, output_image):
         matrix (string): Filename of the matrix file to be used for the transformation
         output_image (string): Filename of the transformed image.
     """
-    sub.run(["dipy_apply_transform", static, moving, matrix, "--out_file", output_image,"--force"], check=False)
+    sub.run(["dipy_apply_transform", static, moving, matrix, 
+             "--out_file", output_image,"--force"], check=False)
     change_datatype(output_image)
 
-def preprocess(image, output, use_FSL=False):
+def preprocess(image, output, use_fsl=False):
     """This function preprocessess the image by reorienting it to RAS, then if the user wants to, uses robustFOV to crop the fov. Then, bias field correction and gaussian denoising is applied
 
     Args:
         image (string): input filename of image to apply the preprocessing
         output (string): filename of the image output
-        use_FSL (bool, optional): Whether to use FSL functions (requires FSL to be installed). Defaults to False.
+        use_fsl (bool, optional): Whether to use FSL functions (requires FSL to be installed). Defaults to False.
     """
  
-    if not use_FSL: # Pipeline python
+    if not use_fsl: # Pipeline python
         # Reorient image to RAS
         reorient = Reorient(orientation='RAS')
         reorient.inputs.in_file = image
@@ -220,16 +228,16 @@ def preprocess(image, output, use_FSL=False):
     for file in ["CT1.mat", "T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz", "temp_reoriented.nii.gz", "temp_reoriented_fov_bias.nii.gz", "temp_reoriented_fov_bias_denoise.nii.gz"]:
         force_delete_file(file) 
 
-def remove_timepoints_rano(all):
+def remove_timepoints_rano(table_all):
     """This function removes the rows that dont have the basic criteria for RANO classification
 
     Args:
-        all (dataframe): table with rows to be removed
+        table_all (dataframe): table with rows to be removed
         table_classifyable (dataframe): final table
     """
     # Remove pre and post op classifications and non existing
     to_delete=["Post-Op", "Pre-Op", False, "Post-Op/PD"]
-    table_classifyable=all.copy(deep=True)
+    table_classifyable=table_all.copy(deep=True)
     for c in to_delete:
         condition = (table_classifyable['RANO'] == c)
         table_classifyable.drop(table_classifyable[condition].index,inplace=True)
@@ -244,22 +252,6 @@ def remove_timepoints_rano(all):
         condition = table_classifyable['RatingRationale'].str.startswith(c,na=False)
         table_classifyable.drop(table_classifyable[condition].index,inplace=True)
     return table_classifyable
-    
-def one_hot(a, num_classes):
-    """This function transforms an integer (usually an index), into one hot encoding format given the number of classes
-
-    Args:
-        a (int): index you want to turn into one hot encoding
-        num_classes (int): number of classes (aka number of elements in the final array)
-
-    Returns:
-        array: one hot encoding of the input
-    """
-    
-    logits=torch.zeros(num_classes)
-    logits[a] = 1
-    return logits
-    #return np.squeeze(np.eye(num_classes)[np.array([a]).reshape(-1)])
 
 def probs2logits(probs,device="cpu"):
     """This function, given a tensor with class probabilities in each row, turns each row into the corresponding logit
@@ -294,7 +286,7 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
 
     Args:
         data_dir (string): path to the dataset directory
-        all (dataframe): dataframe with all the RANO info needed regarding with data to use
+        table_all (dataframe): dataframe with all the RANO info needed regarding with data to use
         classes (list): list of classes
 
     Returns:
@@ -321,7 +313,7 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
         label=classes.index(rano)
         labels.append(label)
         # Turn classes into logits
-        logits = torch.nn.functional.one_hot(torch.tensor(label), num_classes=n_classes)
+        logits = F.one_hot(torch.tensor(label), num_classes=n_classes)
         
         # Create dictionary to store the timepoint's images and its label
         timepoint_dict={}
@@ -415,14 +407,13 @@ def critical_error(y_pred, y):
         value_y = y[i] + 1
         value_ypred = y_pred[i] + 1
 
-        if value_y == 1 or value_y == 2:
+        if value_y in (1, 2):
             value_y *= -1
-        if value_ypred == 1 or value_ypred == 2:
+        if value_ypred in (1, 2):
             value_ypred *= -1
         
         if value_ypred * value_y < 0:
             count_errors += 1
-   
     return count_errors/len(y)
 
 def plot_image(image):
@@ -445,7 +436,6 @@ def plot_image(image):
         plt.figure(figsize = (6, 6))
         plt.imshow(data[:, :, z].T, cmap = 'gray', origin = 'lower')
         plt.title(f'Axial Slice at z={z}')
-        #plt.axis('off')
         plt.colorbar()
         plt.show()
         
