@@ -104,26 +104,3 @@ for patient in [p for p in sorted(os.listdir(data_dir))]:
             force_delete_file(os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
             force_delete_file(os.path.join(w_dir,chosen_mod+"_tostandard.nii.gz"))
             force_delete_file(os.path.join(w_dir,image+"_tostandard.nii.gz"))
-            
-
-
-        
-
-
-#%%
-
-
-""" 
-# Plot images
-mods=["T1","T2","FLAIR"]
-for mod in mods:
-    plot_slices(["/home/amatoso/phd/atlas_t1.nii.gz","./registration_84/"+mod+"_to_standard.nii.gz"])
-    plt.suptitle(mod)
-
-# Check sizes and resolutions
-dir="/home/amatoso/phd/registration"
-for file in os.listdir(dir):
-    sub.run(["mrinfo", dir+"/"+file])
-"""
-
-    # %%

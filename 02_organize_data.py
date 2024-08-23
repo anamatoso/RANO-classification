@@ -3,7 +3,6 @@
 import os
 import pandas as pd
 import pickle
-import shutil
 import subprocess as sub
 from aux import remove_timepoints_rano, check_files_in_subdirectories
 
@@ -54,8 +53,6 @@ def create_count_column(table_all, images, name_column, logic = "and"):
                 if not row[image]:
                     found=False
         return found
-
-
 
     table_all[name_column] = 0
 
@@ -134,5 +131,3 @@ for images_to_count in [["CT1", "T1", "T2", "FLAIR"], ["CT1", "FLAIR"],["T1", "T
     # Sanity check to see if target files are in directories
     file_list = [im+".nii.gz" for im in images_to_count]+[im+"_T-1.nii.gz" for im in images_to_count]
     check_files_in_subdirectories("/home/amatoso/phd/lumiere/datasets/rano_"+mods_to_count+"_T-1", file_list)
-
-# %%
