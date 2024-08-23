@@ -30,7 +30,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
 
         # List the modalities the timepoint has and their resolutions
         available_mods = [item for item in MODALITIES if item+".nii.gz" in os.listdir(w_dir)]
-        resolutions= [get_resolution(os.path.join(w_dir,item+".nii.gz")) for item in available_mods]
+        resolutions=[get_resolution(os.path.join(w_dir,item+".nii.gz")) for item in available_mods]
 
         ##############################################
         # Do preprocessing in all modalities available
@@ -42,7 +42,8 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
 
 
         ##############################################
-        # Find the modality that will be the "main" one from which to calculate the transformation to standard space.
+        # Find the modality that will be the "main" one from which to calculate
+        # the transformation to standard space.
         # It will be the most isotropic according to the aspect ratios of the voxel sizes
         chosen_mod = None
         for mod in available_mods:
@@ -57,8 +58,8 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
             # If we already selected one, but it is not isotropic, change to the current one if
             # the current one is more isotropic than the one we have
             else:
-                res_chosen_mod=resolutions[available_mods.index(chosen_mod)]
-                res_mod=resolutions[available_mods.index(mod)]
+                res_chosen_mod = resolutions[available_mods.index(chosen_mod)]
+                res_mod = resolutions[available_mods.index(mod)]
                 # Compare isotropy and keep the modality that is more isotropic (closer to 1)
                 if abs(1-calculate_isotropy(res_mod)) < abs(1-calculate_isotropy(res_chosen_mod)):
                     chosen_mod=mod
@@ -67,7 +68,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
             continue # in that week no images were acquired (Note: this never happens)
 
 
-   
+
         ##############################################
         # Register "main" image to standard space and save transformation matrix
 
@@ -100,7 +101,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
             # Register to main image
             register(static=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
                      moving=os.path.join(w_dir,image+"_preproc.nii.gz"),
-                     transform_type="rigid", 
+                     transform_type="rigid",
                      output_image=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
 
             # Apply transformation matrix from before to register to standard space
