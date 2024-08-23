@@ -14,7 +14,6 @@ from datetime import datetime
 import monai
 import numpy as np
 import torch
-from fairgbm import train
 from IPython.display import clear_output
 from monai.data import DataLoader, Dataset
 from monai.metrics import ROCAUCMetric, compute_roc_auc
@@ -25,8 +24,8 @@ from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
 from torch.utils.data import WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import critical_error, get_data_and_transforms, probs2logits
 from models import *
+from utils import critical_error, get_data_and_transforms, probs2logits
 
 cuda = torch.cuda.is_available()
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
@@ -176,8 +175,6 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
         model_config  = ViT(in_channels = num_channels, img_size = [240, 240, 155], patch_size = [20, 20, 10], classification = True, num_classes = num_classes, pos_embed_type = 'sincos', dropout_rate = 0.1)
     elif model_name == "monai_resnet":
         model_config  = ResNet("bottleneck", (3, 4, 6, 3), (64, 128, 256, 512), spatial_dims = 3, n_input_channels = num_channels, num_classes = num_classes)
-    elif model_name == "jang_model_mri":
-        model_config  = Jang_model_mri(channels = num_channels, num_classes = num_classes)
     elif model_name == "AlexNet3D":
         model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
     elif model_name == "GoogleNet3D":

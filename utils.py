@@ -162,7 +162,8 @@ def register(static, moving, output_image, transform_type="rigid", out_affine=No
         moving (string): Filename of the image to be moved to the static image space.
         output_image (string): Filename of the transformed/registered image.
         out_affine (string, optional): Filename of the affine transformation matrix
-        to be created. Defaults to None in which no file is created (in fact it is but is is deleted).
+        to be created. Defaults to None in which no file is created
+        (in fact it is but is is deleted).
     """
 
     if out_affine is None:
