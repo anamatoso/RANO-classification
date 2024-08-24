@@ -1,4 +1,5 @@
-""" benchmaerking file """
+""" benchmarking file """
+
 # Imports
 
 import argparse
@@ -31,13 +32,14 @@ def validate_mods_keep(mods):
         mods (str): input string from command
 
     Raises:
-        argparse.ArgumentTypeError: Raises error if the list of mods will not get the dataset correctly
+        argparse.ArgumentTypeError: Raises error if the list of 
+        mods will not get the dataset correctly
 
     Returns:
         list: list of modalities
     """
     l = mods.split(",")
-    if l not in [["CT1", "T1", "T2", "FLAIR"], ["CT1", "FLAIR"], 
+    if l not in [["CT1", "T1", "T2", "FLAIR"], ["CT1", "FLAIR"],
                  ["CT1"], ["T1", "FLAIR"], ["T1", "T2", "FLAIR"]]:
         raise argparse.ArgumentTypeError(f"Invalid set of modalities: {l}. "+
                                          "Write another set, perhaps in a different order")
@@ -100,25 +102,27 @@ if __name__ == '__main__':
     print(DATASET)
     CLASSES        = ["PD", "SD", "PR", "CR"]
     NUM_CLASSES    = len(CLASSES)
-    LOGS_FOLDER    = "/laseebhome/amatoso/phd/Pytorch_Logs" if HOST == "pluto" else "/home/amatoso/phd/Pytorch_Logs"
-    DATA_DIR       = os.path.join(PHD_DIR, "lumiere/datasets/", DATASET) if HOST == "pangeia" else os.path.join(PHD_DIR, "lumiere/datasets_pluto/", DATASET)
+    LOGS_FOLDER    = "/laseebhome/amatoso/phd/Pytorch_Logs" if HOST == "pluto" \
+        else "/home/amatoso/phd/Pytorch_Logs"
+    DATA_DIR       = os.path.join(PHD_DIR, "lumiere/datasets/", DATASET) if HOST == "pangeia" \
+        else os.path.join(PHD_DIR, "lumiere/datasets_pluto/", DATASET)
 
-    MODEL_NAME     = arguments.model_name # "monai_densenet169" # monai_vit monai_resnet monai_classifier monai_densenet121 monai_densenet169 monai_densenet264 monai_densenet201 jang_model_mri AlexNet3D GoogleNet3D
+    MODEL_NAME     = arguments.model_name
     BS             = arguments.batch_size
     N_EPOCHS       = arguments.n_epochs
     LEARNINIG_RATE = arguments.learning_rate
     WEIGHT_DECAY   = arguments.weight_decay
     PATIENCE       = arguments.patience
-    LOSS_WEIGHT    = arguments.loss_weight      
-    SUBTRACT       = arguments.subtract         
-    SAMPLER_WEIGHT = arguments.sampler_weight   
-    CONVERT_BIN    = arguments.binary_classes   
-    DECREASE_LR    = arguments.decrease_LR      
+    LOSS_WEIGHT    = arguments.loss_weight
+    SUBTRACT       = arguments.subtract
+    SAMPLER_WEIGHT = arguments.sampler_weight
+    CONVERT_BIN    = arguments.binary_classes
+    DECREASE_LR    = arguments.decrease_LR
     STOP_DECREASE  = arguments.stop_decrease
     DEC_LR_FACTOR  = arguments.dec_LR_factor
 
-    seed = 2
-    set_determinism(seed)
+    SEED = 2
+    set_determinism(SEED)
 
     # Get table with data info
     print("Getting data...")
@@ -130,13 +134,13 @@ if __name__ == '__main__':
         num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_ALL, CLASSES, SUBTRACT)
 
     if CONVERT_BIN:
-        data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, CLASSES, DATASET) 
+        data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, CLASSES, DATASET)
 
     # Divide data into train and test set and create each dataloader
     print("Creating train and validation datasets...")
     folds = monai.data.utils.partition_dataset_classes(data, labels,
                                                        num_partitions = arguments.n_folds,
-                                                       seed = seed)
+                                                       seed = SEED)
 
     for fold in range(arguments.n_folds):
         print("Creating loaders...")
@@ -167,7 +171,7 @@ if __name__ == '__main__':
 
         train(LOG_DIR, writer, train_loader, test_loader, MODEL_NAME,
               dataset, DEVICE, arguments.learning_rate, N_EPOCHS, OPTIMIZER,
-              seed, WEIGHT_DECAY, LOSS_FUNCTION, model, STOP_DECREASE, DECREASE_LR,
+              SEED, WEIGHT_DECAY, LOSS_FUNCTION, model, STOP_DECREASE, DECREASE_LR,
               DEC_LR_FACTOR, PATIENCE)
 
         # Test model with unseen data
@@ -187,7 +191,7 @@ if __name__ == '__main__':
         result["sampler_weight"] = SAMPLER_WEIGHT
 
         print(result)
-        with open('/home/amatoso/phd/results.csv', 'a') as file: 
+        with open('/home/amatoso/phd/results.csv', 'a', encoding=None) as file:
             writer = csv.DictWriter(file, fieldnames = result.keys())
             writer.writerow(result)
             file.close()

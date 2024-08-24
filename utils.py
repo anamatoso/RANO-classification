@@ -268,6 +268,57 @@ def preprocess(image, output, use_fsl=False):
                  "temp_reoriented_fov_bias_denoise.nii.gz"]:
         force_delete_file(file)
 
+def create_count_column(table_all, images, name_column, logic = "and"):
+    """This function will create a new column in the table_all dataframe named name_column that will count how many past images (of the images list) using the logic that each timepoint has in its past (and present)
+
+    Args:
+        table_all (dataframe): dataframe that will be modified
+        images (list): list of images to count
+        name_column (string): name of the new column that will be added
+        logic (str, optional): logic with which to count the images. Defaults to "and".
+    """
+
+    def have_image(row, images, logic="and"):
+        """This function returns true if the row in the table has the images in the list, following the AND or OR logic
+    Args:
+        row (series): Row of the dataframe
+        logic (str, optional): Logic to determine if the row has the images. Defaults to "or".
+    Returns:
+        bool: True if the patient has the images with the logic and false otherwise
+    """
+        if logic == "or":
+            found=False
+            for image in images:
+                if row[image]:
+                    found=True
+        else: #logic== "and"
+            found = True
+            for image in images:
+                if not row[image]:
+                    found=False
+        return found
+
+    table_all[name_column] = 0
+
+    # Iterate over each patient
+    for patient in table_all['Patient'].unique():
+        patient_mask = table_all['Patient'] == patient
+
+    # Iterate over each row for the current patient
+        for index, _ in table_all[patient_mask].iloc[::-1].iterrows():
+            count = 0
+        # Update the count for each row based on the images value
+            for index2, row2 in table_all[patient_mask].iloc[::-1].iterrows():
+                if index2>index: # Counts with the current image
+                    continue
+                else:
+                    if have_image(row2,images,logic): 
+                        count += 1
+                    else: break
+            table_all.at[index, name_column] = count
+
+
+
 def remove_timepoints_rano(table_all):
     """This function removes the rows that dont have the basic criteria for RANO classification
 
