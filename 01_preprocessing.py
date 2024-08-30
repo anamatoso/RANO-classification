@@ -9,20 +9,22 @@ from utils import (apply_transform, calculate_isotropy, extract_firstvolume,
 
 # Define folders
 ATLAS_FOLDER    = "./atlases"
-LUMIERE_FOLDER  = "./lumiere/data"
-DATA_DIR        = os.path.join(LUMIERE_FOLDER,"data")
-
+DATA_DIR        = "./LUMIERE/Imaging"
 MODALITIES=["CT1","T1","T2","FLAIR"]
 
 #%%
 # Extract first volume of SRI atlases (T1 and T2)
 extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T1_brain.nii"),
                     os.path.join(ATLAS_FOLDER,"sri24_T1_3D.nii.gz"))
+print("First volume of T1 atlas extracted.")
 
 extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T2_brain.nii"),
                     os.path.join(ATLAS_FOLDER,"sri24_T2_3D.nii.gz"))
+print("First volume of T1 atlas extracted.")
 
 for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
+    if not os.path.isdir(patient):
+        continue
     p_dir = os.path.join(DATA_DIR,patient)
     for week in [p for p in sorted(os.listdir(p_dir))]:
         print("Doing "+patient+", "+week)
