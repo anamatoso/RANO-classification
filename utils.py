@@ -261,12 +261,11 @@ def preprocess(image, output, use_fsl=False):
                                         [240,240,155],True,0)
         ants.image_write(resampled, output)
 
-
     # Remove temporary files
-    for file in ["CT1.mat", "T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz",
+    for file in ["CT1_ras.nii.gz", "CT1.mat","T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz",
                  "temp_reoriented.nii.gz", "temp_reoriented_fov_bias.nii.gz", 
                  "temp_reoriented_fov_bias_denoise.nii.gz"]:
-        force_delete_file(file)
+        force_delete_file(os.path.join(os.getcwd(),file))
 
 def create_count_column(table_all, images, name_column, logic = "and"):
     """This function will create a new column in the table_all dataframe named name_column that will count how many past images (of the images list) using the logic that each timepoint has in its past (and present)
@@ -287,7 +286,7 @@ def create_count_column(table_all, images, name_column, logic = "and"):
         bool: True if the patient has the images with the logic and false otherwise
     """
         if logic == "or":
-            found=False
+            found = False
             for image in images:
                 if row[image]:
                     found=True
@@ -354,6 +353,7 @@ def probs2logits(probs, device="cpu"):
     Returns:
         tensor: Tensor of logits
     """
+    
     max_indices = torch.argmax(probs, dim=1)
     logits=torch.zeros(probs.size(),device=device)
     logits[torch.arange(probs.size(0)), max_indices] = 1
