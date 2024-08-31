@@ -18,7 +18,7 @@ source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Afterwards, add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.9) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.9/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
+Afterwards, add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8.10) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
 ```python
 class SubtractItemsd(MapTransform):
