@@ -23,11 +23,15 @@ extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T2_brain.nii"),
 print("First volume of T1 atlas extracted.")
 
 for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
-    if not os.path.isdir(patient):
+    if not os.path.isdir(os.path.join(DATA_DIR,patient)):
+        print(patient+" is not a directory, so it will not be processed")
         continue
     p_dir = os.path.join(DATA_DIR,patient)
     for week in [p for p in sorted(os.listdir(p_dir))]:
-        print("Doing "+patient+", "+week)
+        if not os.path.isdir(os.path.join(p_dir,week)):
+            print(patient+" is not a directory, so it will not be processed")
+            continue
+        print("Processing "+patient+", "+week)
         w_dir = os.path.join(p_dir,week)
 
         # List the modalities the timepoint has and their resolutions
@@ -75,19 +79,22 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         # Register "main" image to standard space and save transformation matrix
 
         print("Registering " + chosen_mod + " to standard space")
-        # Register to T1 atlas if the main modality is T1 with or without contrast
-        if chosen_mod in ["CT1", "T1"]:
-            register(static="/home/amatoso/phd/atlases/sri24_T1_3D.nii.gz",
-                           moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
-                           output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
-                           transform_type="affine",
-                           out_affine=os.path.join(w_dir,"matrix2std.txt"))
-        else: # Register to T2 atlas
-            register(static="/home/amatoso/phd/atlases/sri24_T2_3D.nii.gz",
-                           moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
-                           output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
-                           transform_type="affine",
-                           out_affine=os.path.join(w_dir,"matrix2std.txt"))
+
+        # Check if registration is done
+        if not os.path.exists(os.path.join(w_dir,chosen_mod+"_tostd.nii.gz")):
+            # Register to T1 atlas if the main modality is T1 with or without contrast
+            if chosen_mod in ["CT1", "T1"]:
+                register(static=os.path.join(ATLAS_FOLDER,"sri24_T1_3D.nii.gz"),
+                            moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
+                            output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
+                            transform_type="affine",
+                            out_affine=os.path.join(w_dir,"matrix2std.txt"))
+            else: # Register to T2 atlas
+                register(static=os.path.join(ATLAS_FOLDER,"sri24_T2_3D.nii.gz"),
+                            moving=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
+                            output_image=os.path.join(w_dir,chosen_mod+"_tostd.nii.gz"),
+                            transform_type="affine",
+                            out_affine=os.path.join(w_dir,"matrix2std.txt"))
 
 
         # Check whether there are other modalities to transform besides the main one
@@ -100,25 +107,30 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         # Iterate through the rest of the images to be transformed
         print("Registering other images to the main image and then to standard space")
         for image in to_do:
-            # Register to main image
-            register(static=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
-                     moving=os.path.join(w_dir,image+"_preproc.nii.gz"),
-                     transform_type="rigid",
-                     output_image=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
+            # Check if image was already registered
+            if not os.path.exists(os.path.join(w_dir,image+"_tostd.nii.gz")):
+                # Register to main image
+                register(static=os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"),
+                        moving=os.path.join(w_dir,image+"_preproc.nii.gz"),
+                        transform_type="rigid",
+                        output_image=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
 
-            # Apply transformation matrix from before to register to standard space
-            if chosen_mod in ["CT1", "T1"]:
-                apply_transform(static="/home/amatoso/phd/atlases/sri24_T1_3D.nii.gz",
-                                moving=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"),
-                                matrix=os.path.join(w_dir,"matrix2std.txt"),
-                                output_image=os.path.join(w_dir,image+"_tostd.nii.gz"))
-            else:
-                apply_transform(static="/home/amatoso/phd/atlases/sri24_T2_3D.nii.gz",
-                                moving=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"),
-                                matrix=os.path.join(w_dir,"matrix2std.txt"),
-                                output_image=os.path.join(w_dir,image+"_tostd.nii.gz"))
+                # Apply transformation matrix from before to register to standard space
+                if chosen_mod in ["CT1", "T1"]:
+                    apply_transform(static=os.path.join(ATLAS_FOLDER,"sri24_T1_3D.nii.gz"),
+                                    moving=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"),
+                                    matrix=os.path.join(w_dir,"matrix2std.txt"),
+                                    output_image=os.path.join(w_dir,image+"_tostd.nii.gz"))
+                else:
+                    apply_transform(static=os.path.join(ATLAS_FOLDER,"sri24_T2_3D.nii.gz"),
+                                    moving=os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"),
+                                    matrix=os.path.join(w_dir,"matrix2std.txt"),
+                                    output_image=os.path.join(w_dir,image+"_tostd.nii.gz"))
 
-            # Delete unnecessary files
-            force_delete_file(os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
-            force_delete_file(os.path.join(w_dir,chosen_mod+"_tostandard.nii.gz"))
-            force_delete_file(os.path.join(w_dir,image+"_tostandard.nii.gz"))
+                # Delete unnecessary files
+                force_delete_file(os.path.join(w_dir,image+"_to"+chosen_mod+".nii.gz"))
+                force_delete_file(os.path.join(w_dir,image+"_preproc.nii.gz"))
+        
+        force_delete_file(os.path.join(w_dir,chosen_mod+"_preproc.nii.gz"))
+        force_delete_file(os.path.join(w_dir,"matrix2std.txt"))
+
