@@ -329,17 +329,17 @@ def remove_timepoints_rano(table_all):
     to_delete=["Post-Op", "Pre-Op", False, "Post-Op/PD"]
     table_classifyable=table_all.copy(deep=True)
     for c in to_delete:
-        condition = table_classifyable['RANO'] == c
+        condition = table_classifyable["Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)"] == c
         table_classifyable.drop(table_classifyable[condition].index,inplace=True)
 
     # Remove rows where less than 3 months column is true
-    condition = table_classifyable['LessThan3Months'] is True
+    condition = table_classifyable['LessThan3Months'] == True
     table_classifyable.drop(table_classifyable[condition].index,inplace=True)
 
     # remove less than 3 months in the rationale column
     to_delete=["less than 3 months", "Less than 3 months", "Not a timepoint for RANO measurement"]
     for c in to_delete:
-        condition = table_classifyable['RatingRationale'].str.startswith(c,na=False)
+        condition = table_classifyable['Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)'].str.startswith(c,na=False)
         table_classifyable.drop(table_classifyable[condition].index,inplace=True)
     return table_classifyable
 
