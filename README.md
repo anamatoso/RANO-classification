@@ -1,11 +1,16 @@
-# RANO-classification
-
+# RANO-classification <!-- omit from toc -->
 
 This repository contains the scripts used to classify the RANO criteria. 
 It includes scripts for preprocessing and organizing of the data from th LUMIERE dataset.
 
+## Table of Contents <!-- omit from toc -->
+- [How to use](#how-to-use)
+  - [1. Preprocessing Script](#1-preprocessing-script)
+  - [2. Organize data Script](#2-organize-data-script)
+
 
 ## How to use
+
 First, clone the repository using:
 ```bash
 git clone https://github.com/anamatoso/RANO-classification.git
@@ -17,6 +22,8 @@ python -m venv venv
 source ./venv/bin/activate
 pip install -r requirements.txt
 ```
+
+### 1. Preprocessing Script
 
 Afterwards, add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8.10) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
@@ -72,3 +79,7 @@ class SubtractItemsd(MapTransform):
             )
         return d
 ```
+
+### 2. Organize data Script
+
+In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
