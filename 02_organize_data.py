@@ -90,7 +90,7 @@ for images_to_count in [["CT1", "T1", "T2", "FLAIR"],
     print("Total timepoints in " + mods_to_count + ": " + str(count))
 
     # Sanity check to see if target files are in directories
-    # file_list = [im+".nii.gz" for im in images_to_count]+[im+"_T-1.nii.gz" \
-    #                                                       for im in images_to_count]
-    # check_files_in_subdirectories(os.path.join(DATASETS_DIR, "rano_"+mods_to_count+"_T-1"),
-    #                               file_list)
+    file_list = [im+".nii.gz" for im in images_to_count]+[im+"_T-1.nii.gz" \
+                                                          for im in images_to_count]
+    check_files_in_subdirectories(os.path.join(DATASETS_DIR, "rano_"+mods_to_count+"_T-1"),
+                                  file_list)
