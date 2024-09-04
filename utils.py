@@ -614,7 +614,7 @@ def init_weights(model):
 
 
 def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
-                       device, model_name, dataset, subtract, weight_decay, host,
+                       device, model_name, dataset, subtract, weight_decay,
                        weight, loss_function, stop_decrease, decrease_LR, sampler_weight, dec_LR_factor, fold):
     
     """This function generates a tensorboard folder to keep the evolution of the model training
@@ -640,7 +640,7 @@ def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
         list: log dir of particular training session, and the writer
     """
     current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-    log_dir = os.path.join(logs_folder, current_time + "_" + host)
+    log_dir = os.path.join(logs_folder, current_time)
     print("Log: " + log_dir)
     writer = SummaryWriter(log_dir = log_dir)
     writer.add_text("Number of epochs", "Number of epochs = " + str(n_epochs))

@@ -14,36 +14,36 @@ DATA_DIR = "./LUMIERE/Imaging"
 #%% Load data - create table all
 
 # Import CSVs
-table_RANO = pd.read_csv("./LUMIERE/LUMIERE-ExpertRating-v202211.csv",
+TABLE_RANO = pd.read_csv("./LUMIERE/LUMIERE-ExpertRating-v202211.csv",
                          delimiter = ",",header = 0)
-table_completeness = pd.read_csv("./LUMIERE/LUMIERE-datacompleteness.csv",
+TABLE_COMPLETENESS = pd.read_csv("./LUMIERE/LUMIERE-datacompleteness.csv",
                                  delimiter = ",",header = 0)
-table_all = table_RANO.merge(table_completeness,on = ["Patient", "Timepoint"],how = "outer")
-del table_RANO, table_completeness
+TABLE_ALL = TABLE_RANO.merge(TABLE_COMPLETENESS,on = ["Patient", "Timepoint"],how = "outer")
+del TABLE_RANO, TABLE_COMPLETENESS
 
 # Replace crosses and empty with true/false
 for column in ["LessThan3Months","Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)",
                "NonMeasurableLesions","Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)",
                 "CT1", "T1", "T2", "FLAIR", "DeepBraTumIA", "HD-GLIO-AUTO",
                "DeepBraTumIA-CoLlAGe","HD-GLIO-AUTO-CoLlAGe"]:  
-    table_all[column] = table_all[column].replace({'x': True, '': False, 'NaN': False, None: False})
+    TABLE_ALL[column] = TABLE_ALL[column].replace({'x': True, '': False, 'NaN': False, None: False})
 del column
 
 # Sort table and reset index
-table_all.sort_values(by=['Patient', 'Timepoint'], inplace=True)
-table_all.reset_index(drop=True, inplace=True)
+TABLE_ALL.sort_values(by=['Patient', 'Timepoint'], inplace=True)
+TABLE_ALL.reset_index(drop=True, inplace=True)
 
 # Create columns for knowing how many past images each timepoint 
 # has (agreggated by groups of images)
 for images in [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"],
                ["T1","T2","FLAIR"],["T1","FLAIR"]]:
     name = "_".join(images) + "_count"
-    create_count_column(table_all, images, name)
+    create_count_column(TABLE_ALL, images, name)
 del name, images
 
 # Save table
 with open("table_all.pkl","wb") as f:
-    pickle.dump(table_all,f)
+    pickle.dump(TABLE_ALL,f)
 del f
 
 #%% Create datasets with classifyable data
@@ -54,7 +54,7 @@ for images_to_count in [["CT1", "T1", "T2", "FLAIR"],
                         ["CT1", "FLAIR"],["T1", "T2", "FLAIR"],["T1", "FLAIR"],["CT1"]]:
     mods_to_count = "_".join(images_to_count)
     print("Doing "+mods_to_count+ " dataset")
-    table_classifyable = remove_timepoints_rano(table_all) # remove less than 3 months and pre and post op
+    table_classifyable = remove_timepoints_rano(TABLE_ALL) # remove less than 3 months and pre and post op
 
     # Create has past column to remove the timepoints that have less timepoints in the past than what we want
     column = mods_to_count + "_count"
@@ -82,7 +82,7 @@ for images_to_count in [["CT1", "T1", "T2", "FLAIR"],
 
             # Add images from timepoints from before
             image = os.path.join(DATA_DIR, table_classifyable["Patient"][ind],
-                                 table_all["Timepoint"][ind-1], mod + "_tostd.nii.gz")
+                                 TABLE_ALL["Timepoint"][ind-1], mod + "_tostd.nii.gz")
             if os.path.exists(image) and not os.path.exists(os.path.join(path,
                                                                          mod + "_T-1.nii.gz")):
                 os.symlink(image, os.path.join(path, mod + "_T-1.nii.gz"))

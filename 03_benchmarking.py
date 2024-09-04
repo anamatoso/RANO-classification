@@ -1,7 +1,6 @@
 """ benchmarking file """
 
 # Imports
-
 import argparse
 import csv
 import os
@@ -17,7 +16,7 @@ from monai.utils import set_determinism
 from utils import (convert2binary, create_tensorboard, get_data_and_transforms,
                    get_loaders, get_model_setup, init_weights, test, train)
 
-cuda = torch.cuda.is_available()
+CUDA = torch.cuda.is_available()
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 torch.cuda.empty_cache()
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -96,17 +95,13 @@ if __name__ == '__main__':
     arguments = parse_args()
     print(arguments.mods_keep)
 
-    HOST           = socket.gethostname() if socket.gethostname() == "pangeia" else "pluto"
-    PHD_DIR        = os.getcwd()
+    MAIN_DIR        = os.getcwd()
     DATASET        = "rano_"+"_".join(arguments.mods_keep)+"_T-1"
     print(DATASET)
     CLASSES        = ["PD", "SD", "PR", "CR"]
     NUM_CLASSES    = len(CLASSES)
-    LOGS_FOLDER    = "/laseebhome/amatoso/phd/Pytorch_Logs" if HOST == "pluto" \
-        else "/home/amatoso/phd/Pytorch_Logs"
-    DATA_DIR       = os.path.join(PHD_DIR, "lumiere/datasets/", DATASET) if HOST == "pangeia" \
-        else os.path.join(PHD_DIR, "lumiere/datasets_pluto/", DATASET)
-
+    LOGS_FOLDER    = "./Pytorch_Logs"
+    DATA_DIR       = "./LUMIERE/Imaging"
     MODEL_NAME     = arguments.model_name
     BS             = arguments.batch_size
     N_EPOCHS       = arguments.n_epochs
@@ -126,7 +121,7 @@ if __name__ == '__main__':
 
     # Get table with data info
     print("Getting data...")
-    with open(os.path.join(PHD_DIR, "lumiere/table_all.pkl"), "rb") as f:
+    with open(os.path.join(MAIN_DIR, "table_all.pkl"), "rb") as f:
         TABLE_ALL = pickle.load(f)
 
     # Create the data, get transforms and number of channels
@@ -148,7 +143,7 @@ if __name__ == '__main__':
                                                                   SAMPLER_WEIGHT, transforms_train,
                                                                   transforms_test, fold, folds)
 
-        DEVICE = torch.device("cuda" if cuda else "cpu")
+        DEVICE = torch.device("cuda" if CUDA else "cpu")
         print("Creating model...")
         MODEL_CONFIG, model, WEIGHT, OPTIMIZER, LOSS_FUNCTION = get_model_setup(MODEL_NAME,
                                                                                 class_prevalence,
@@ -164,7 +159,7 @@ if __name__ == '__main__':
         print("Learning with model "+ MODEL_NAME)
         LOG_DIR, writer = create_tensorboard(N_EPOCHS, BS, LEARNINIG_RATE, LOGS_FOLDER,
                                              DEVICE, MODEL_NAME, DATASET, SUBTRACT,
-                                             WEIGHT_DECAY, HOST, WEIGHT, LOSS_FUNCTION,
+                                             WEIGHT_DECAY, WEIGHT, LOSS_FUNCTION,
                                              STOP_DECREASE, DECREASE_LR, SAMPLER_WEIGHT,
                                              DEC_LR_FACTOR,fold)
 
@@ -191,7 +186,7 @@ if __name__ == '__main__':
         result["sampler_weight"] = SAMPLER_WEIGHT
 
         print(result)
-        with open('/home/amatoso/phd/results.csv', 'a', encoding=None) as file:
+        with open('results.csv', 'a', encoding=None) as file:
             writer = csv.DictWriter(file, fieldnames = result.keys())
             writer.writerow(result)
             file.close()
