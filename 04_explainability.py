@@ -1,18 +1,30 @@
 print("Importing...")
-import os
 import argparse
-import sys
-import pandas as pd
+import os
+import pickle
 import socket
+import sys
+
+import matplotlib.pyplot as plt
+import monai
+import numpy as np
+import pandas as pd
+from captum.attr import DeepLift, Saliency
+from captum.attr import visualization as viz
+from monai.utils import set_determinism
+from sklearn.metrics import confusion_matrix
+
+from models import *
+from utils import (convert2binary, get_data_and_transforms, get_loaders,
+                   get_model_setup, test)
+
 # CAPTUM
 # import torchvision
 # from captum.attr import IntegratedGradients
-# from captum.attr import Saliency
-# from captum.attr import DeepLift
 # from captum.attr import NoiseTunnel
-# from captum.attr import visualization as viz
 
-
+CUDA = torch.cuda.is_available()
+DATASETS = "./Datasets"
 def parse_argument():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--log_folder', type = str, required = True,
@@ -27,23 +39,14 @@ def parse_argument():
 if __name__ == '__main__':
 
     arguments = parse_argument()
-    host        = socket.gethostname() if socket.gethostname() == "pangeia" else "pluto"
-    home= "home" if host == "pangeia" else "laseebhome"
     print("Testing on "+arguments.log_folder)
-    logs_folder    = "/"+home+"/amatoso/phd/Pytorch_Logs"
+    logs_folder    = "Pytorch_Logs"
     if os.path.exists(os.path.join(logs_folder,arguments.log_folder,"confusion_matrix.csv")):
         print(arguments.log_folder + " already done")
         sys.exit(1)
     
-    from aux import get_data_and_transforms
-    from models import *
-    from RANO_benchmarking import *
-    from sklearn.metrics import confusion_matrix
-    from monai.utils import set_determinism
-    import matplotlib.pyplot as plt
-
     # Get results from that attempt
-    df = pd.read_csv('/home/amatoso/phd/results.csv')
+    df = pd.read_csv('results.csv')
     row = df[df['logdir'] == arguments.log_folder]
     results = row.to_dict(orient='records')[0]
 
@@ -52,7 +55,6 @@ if __name__ == '__main__':
     dataset         = results["dataset"]
     classes         = ["PD", "SD", "PR", "CR"]
     num_classes     = len(classes)
-    data_dir        = os.path.join(phd_dir, "lumiere/datasets/", dataset) if host == "pangeia" else os.path.join(phd_dir, "lumiere/datasets_pluto/", dataset)
     model_name      = results["model"]
     subtract        = results["subtract"] == True
     convert_bin     = results["binary"] == "True"
@@ -71,7 +73,7 @@ if __name__ == '__main__':
         all = pickle.load(f)
 
     # Create the data, get transforms and number of channels
-    data,  transforms_train, transforms_test, num_channels, labels = get_data_and_transforms(data_dir, all, classes, subtract)
+    data,  transforms_train, transforms_test, num_channels, labels = get_data_and_transforms(DATASETS, all, classes, subtract)
 
     if convert_bin:
         classes, num_classes, dataset = convert2binary(data, labels) 
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     print("Getting loaders...")
     class_prevalence, _, test_loader = get_loaders(classes, bs, sampler_weight, transforms_train, transforms_test, fold, folds)
 
-    device = torch.device("cuda" if cuda else "cpu")
+    device = torch.device("cuda" if CUDA else "cpu")
     print("Getting model setup...")
     model_config, model, _, _, _ = get_model_setup(model_name, class_prevalence, device, learning_rate, weight_decay, loss_weight, num_channels, num_classes)        
 
