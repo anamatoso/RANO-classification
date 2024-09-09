@@ -2,7 +2,6 @@ print("Importing...")
 import argparse
 import os
 import pickle
-import socket
 import sys
 
 import matplotlib.pyplot as plt

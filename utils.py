@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
+import torch.nn.functional as F
 from IPython.display import display
 from ipywidgets import HBox, IntSlider, Layout, interactive
 from monai.data import DataLoader, Dataset

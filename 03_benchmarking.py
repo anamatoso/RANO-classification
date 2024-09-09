@@ -6,7 +6,6 @@ import csv
 import os
 import pickle
 import resource
-import socket
 
 import monai
 import torch
