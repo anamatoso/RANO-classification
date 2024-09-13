@@ -7,6 +7,7 @@ It includes scripts for preprocessing and organizing of the data from th LUMIERE
 - [How to use](#how-to-use)
   - [1. Preprocessing Script](#1-preprocessing-script)
   - [2. Organize data Script](#2-organize-data-script)
+  - [3. Benchmarking Script](#3-benchmarking-script)
 
 
 ## How to use
@@ -83,3 +84,12 @@ class SubtractItemsd(MapTransform):
 ### 2. Organize data Script
 
 In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
+
+
+### 3. Benchmarking Script
+
+An example of an experiment to run would be:
+
+```bash
+python RANO_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --stop_decrease --mods_keep T1,T2,FLAIR
+```
