@@ -1,13 +1,14 @@
 # RANO-classification <!-- omit from toc -->
 
 This repository contains the scripts used to classify the RANO criteria. 
-It includes scripts for preprocessing and organizing of the data from th LUMIERE dataset.
+It includes scripts for preprocessing and organizing of the data from the LUMIERE dataset.
 
 ## Table of Contents <!-- omit from toc -->
 - [How to use](#how-to-use)
-  - [1. Preprocessing Script](#1-preprocessing-script)
-  - [2. Organize data Script](#2-organize-data-script)
-  - [3. Benchmarking Script](#3-benchmarking-script)
+  - [1. Organize data Script](#1-organize-data-script)
+  - [2. Create atlases folder](#2-create-atlases-folder)
+  - [3. Run Preprocessing and Organization](#3-run-preprocessing-and-organization)
+  - [4. Run Benchmarking Script](#4-run-benchmarking-script)
 
 
 ## How to use
@@ -24,9 +25,31 @@ source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 1. Preprocessing Script
+### 1. Organize data Script
 
-Afterwards, add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
+In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
+
+### 2. Create atlases folder
+Create an atlases folder:
+
+```bash
+mkdir atlases
+```
+and add the files `SRI24_T1_brain.nii` and `SRI24_T2_brain.nii` to that folder.
+
+### 3. Run Preprocessing and Organization
+
+Run both the `01_preprocessing.py` and the `02_organize_data.py`:
+```bash
+python ./01_preprocessing.py
+python ./02_organize_data.py
+```
+
+### 4. Run Benchmarking Script
+
+Before runing the `03_benchmarking.py` file you must add a transform class to the monai package.
+
+Add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
 ```python
 class SubtractItemsd(MapTransform):
@@ -80,15 +103,7 @@ class SubtractItemsd(MapTransform):
             )
         return d
 ```
-
-### 2. Organize data Script
-
-In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
-
-
-### 3. Benchmarking Script
-
-An example of an experiment to run would be:
+Then you can run an experiment. An example of an experiment to run would be:
 
 ```bash
 python RANO_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --stop_decrease --mods_keep T1,T2,FLAIR
