@@ -2,20 +2,30 @@
 """
 
 import os
+import shutil
 import subprocess as sub
 import sys
 import time
 from datetime import datetime
 
-import ants
-import matplotlib.pyplot as plt
+import imageio
 import nibabel as nib
 import numpy as np
+import matplotlib.pyplot as plt
+
+import ants
+from IPython.display import display
+from ipywidgets import HBox, IntSlider, Layout, interactive
+from nipype.interfaces.image import Reorient
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                             precision_score, recall_score)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from IPython.display import display
-from ipywidgets import HBox, IntSlider, Layout, interactive
+from torch.utils.data import WeightedRandomSampler
+from torch.utils.tensorboard import SummaryWriter
+
 from monai.data import DataLoader, Dataset
 from monai.data.meta_tensor import MetaTensor
 from monai.metrics import ROCAUCMetric, compute_roc_auc
@@ -26,13 +36,9 @@ from monai.transforms import (Compose, ConcatItemsd, DeleteItemsd, LoadImaged,
                               RandFlipd, RandGaussianNoised,
                               RandScaleIntensityd, SubtractItemsd)
 from monai.utils import first, set_determinism
-from nipype.interfaces.image import Reorient
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
-                             precision_score, recall_score)
-from torch.utils.data import WeightedRandomSampler
-from torch.utils.tensorboard import SummaryWriter
 
-from models import AlexNet3D, GoogleNet3D
+from models import (AlexNet3D, DenseNetWithClinical)
+
 
 
 def plot_slices(images):
@@ -572,8 +578,12 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
         model_config  = ResNet("bottleneck", (3, 4, 6, 3), (64, 128, 256, 512), spatial_dims = 3, n_input_channels = num_channels, num_classes = num_classes)
     elif model_name == "AlexNet3D":
         model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
-    elif model_name == "GoogleNet3D":
-        model_config  = GoogleNet3D(num_channels, num_classes = num_classes)  
+    elif model_name == "medicalnet_resnet18":
+        from modelresnet import resnet18
+        model_config  = resnet18(sample_input_W=240, sample_input_H=240, sample_input_D=155, shortcut_type='A', no_cuda=False, num_seg_classes=4)  
+    elif model_name == "densenet264clinical":
+        image_model  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
+        model_config = DenseNetWithClinical(densenet_model=image_model, num_classes=num_classes, clinical_data_dim=5)
     else: sys.exit('Please choose one of the models available. You didnt write any one of them')
 
     model     = model_config.to(device)
@@ -664,7 +674,7 @@ def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
 
 def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
           device, learning_rate, n_epochs, optimizer, seed, weight_decay, 
-          loss_function, model, stop_decrease, decrease_LR, dec_LR_factor, patience):
+          loss_function, model, decrease_LR, dec_LR_factor, patience, clinical_data):
     """Training and validation loop
 
     Args:
@@ -704,7 +714,7 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
     torch.cuda.empty_cache()
     for epoch in range(n_epochs):
         # Early stopping if lr decreases more then patience times
-        if stop_decrease and lr_decreases == patience:
+        if lr_decreases == patience:
             break
 
         print("-" * 10)
@@ -717,11 +727,10 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
         last_batch = time.time()
         for batch_data in train_loader:
             step += 1
-            inputs, labels = batch_data["images"].to(device), batch_data["label"].to(device)
+            inputs, labels = batch_data["images"].to(device), batch_data["label"].float().to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
+            outputs = model(inputs) if not clinical_data else model(inputs,batch_data["clinical"].to(device))
             loss = loss_function(outputs, labels) if model_name != "monai_vit" else loss_function(outputs[0], labels)
-
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
@@ -768,8 +777,8 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
             y_onehot = torch.tensor([], dtype = torch.long, device = device)
             for i, val_data in enumerate(test_loader):
                 # Get ground truth and calculate output given input
-                val_images, val_labels = val_data["images"].to(device), val_data["label"].to(device)
-                outputs = model(val_images)
+                val_images, val_labels = val_data["images"].to(device), val_data["label"].float().to(device)
+                outputs = model(val_images) if not clinical_data else model(val_images, val_data["clinical"].to(device))
                 output_onehot = probs2logits(outputs, device = device) if model_name != "monai_vit" else probs2logits(outputs[0],device = device)
                 y_onehot = torch.cat([y_onehot, val_labels], dim = 0)
                 y = torch.cat([y, torch.argmax(val_labels, 1)], dim = 0)
@@ -853,7 +862,7 @@ def critical_error(y_pred, y):
             count_errors += 1
     return count_errors/len(y)
 
-def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model_name):
+def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model_name, clinical_data):
     """Function to test model
 
     Args:
@@ -889,12 +898,13 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
         real = torch.tensor([], dtype = torch.long, device = device)
         for batch in test_loader:
             # Get ground truth and calculate output given input
-            test_images, test_labels = batch["images"].to(device), batch["label"].to(device)
+            test_images, test_labels = batch["images"].to(device), batch["label"].float().to(device)
             real = torch.cat([real, test_labels.argmax(dim = 1)])
             real_onehot = torch.cat([real_onehot, test_labels], dim = 0)
 
             # Get output/predicted values
-            outputs_probs = sigsoft(model_trained(test_images)) if model_name != "monai_vit" else sigsoft(model_trained(test_images)[0])
+            outputs = model_trained(test_images) if not clinical_data else model_trained(test_images, batch["clinical"].to(device))
+            outputs_probs = sigsoft(outputs) if model_name != "monai_vit" else sigsoft(outputs[0])
             outputs = outputs_probs.argmax(dim = 1)
             predicted = torch.cat([predicted, outputs])
             predicted_probs = torch.cat([predicted_probs, outputs_probs], dim = 0)
@@ -939,58 +949,85 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
 
 
 
-def plot_image(image):
-    """This function plots the axial slice of an image along with a z slider 
-    so that the z coordinate can be changed dynamically
+def plot_image(image, norm = None):
+    """This function plots the axial slice of an image along with a z slider so that the z coordinate can be changed dynamically
 
     Args:
         image (string): file path of the image to plot
+        norm (None or string): see norm parameter of plt.imshow
     """
+
     # Load data of image
-    if isinstance(image, str):
+    if type(image) is str:
         img = nib.load(image)
         data = img.get_fdata()
-    elif isinstance(image, MetaTensor):
+    elif type(image) is MetaTensor:
         data = image.cpu().numpy()
     else:
         data=image
 
     # Function to display axial slice
     def display_axial_slice(z):
+        max_image=np.max(np.max(np.max(data)))
+        if norm=="log":
+            min_image=np.min(np.min(np.min(data))) if np.min(np.min(np.min(data))) !=0 else 0.0000001
+        else:
+            min_image=np.min(np.min(np.min(data)))
         plt.figure(figsize = (6, 6))
-        plt.imshow(data[:, :, z].T, cmap = 'gray', origin = 'lower')
+        plt.imshow(data[:, :, z].T, cmap = 'gray', origin = 'lower',vmin=min_image,vmax=max_image, norm=norm)
         plt.title(f'Axial Slice at z={z}')
         plt.colorbar()
         plt.show()
+        
 
     # Interactively select axial slice using a slider
-    z_slider = IntSlider(min = 0, max = data.shape[2] - 1, step = 1, value = data.shape[2] // 2,
-                         orientation = 'vertical', description = 'Axial slice')
+    z_slider = IntSlider(min = 0, max = data.shape[2] - 1, step = 1, value = data.shape[2] // 2, orientation = 'vertical', description = 'Axial slice')
     w = interactive(display_axial_slice, z=z_slider)
 
     box_layout = Layout(align_items = 'center')
 
     display(HBox([w.children[1], w.children[0]], layout = box_layout))
 
-def plot_saliency(image_data, saliency):
-    """This function plots the saliency map along with the input image (data) 
-    of a certain prediction.
+def plot_saliency(image_data, saliency, overlay=False, cmap="gray"):
+    """This function plots the saliency map along with the input image (data) of a certain prediction.
 
     Args:
         image (numpy array): image data to be plotted
         saliency (numpy array): saliency map to be plotted
     """
+
     # Function to display axial slice
+    def display_axial_slice_overlay(z):
+        max_saliency=np.max(np.max(np.max(saliency)))
+        min_saliency=np.min(np.min(np.min(saliency)))
+        max_image=np.max(np.max(np.max(image_data)))
+        min_image=np.min(np.min(np.min(image_data)))
+
+        plt.figure(figsize = (6, 6))
+        plt.imshow(image_data[:, :, z].T, cmap = 'gray', origin = 'lower',vmin=min_image, vmax=max_image)
+        plt.imshow(saliency[:, :, z].T, cmap = cmap, origin = 'lower',alpha=0.5,vmin=min_saliency,vmax=max_saliency)
+        plt.xticks(list(np.linspace(0, image_data.shape[0], 11)))
+        plt.yticks(list(np.linspace(0, image_data.shape[1], 11)))
+        plt.title(f'Axial Slice at z={z}')
+        plt.colorbar()
+        plt.tight_layout()
+        plt.show()
+
     def display_axial_slice(z):
+        max_saliency=np.max(np.max(np.max(saliency)))
+        min_saliency=np.min(np.min(np.min(saliency)))
+        max_image=np.max(np.max(np.max(image_data)))
+        min_image=np.min(np.min(np.min(image_data)))
+
         plt.figure(figsize = (6, 6))
         plt.subplot(1, 2, 1)
-        plt.imshow(image_data[:, :, z].T, cmap = 'gray', origin = 'lower')
+        plt.imshow(image_data[:, :, z].T, cmap = 'gray', origin = 'lower',vmin=min_image,vmax=max_image)
         plt.title(f'Axial Slice at z={z}')
         plt.xticks(list(np.linspace(0, image_data.shape[0], 11)))
         plt.yticks(list(np.linspace(0, image_data.shape[1], 11)))
         plt.colorbar()
         plt.subplot(1,2,2)
-        plt.imshow(saliency[:, :, z].T, cmap = 'rainbow', origin = 'lower')
+        plt.imshow(saliency[:, :, z].T, cmap = 'jet', origin = 'lower',vmin=min_saliency,vmax=max_saliency)
         plt.title(f'Axial Slice at z={z}')
         plt.xticks(list(np.linspace(0, image_data.shape[0], 11)))
         plt.yticks(list(np.linspace(0, image_data.shape[1], 11)))
@@ -999,9 +1036,79 @@ def plot_saliency(image_data, saliency):
         plt.show()
 
     # Interactively select axial slice using a slider
-    z_slider = IntSlider(min = 0, max = image_data.shape[2] - 1, step = 1,
-                         value = image_data.shape[2] // 2,
-                         orientation = 'vertical', description = 'Axial slice')
-    w = interactive(display_axial_slice, z = z_slider)
+    z_slider = IntSlider(min = 0, max = image_data.shape[2] - 1, step = 1, value = image_data.shape[2] // 2, orientation = 'vertical', description = 'Axial slice')
+    if overlay:
+        w = interactive(display_axial_slice_overlay, z = z_slider)
+    else:
+        w = interactive(display_axial_slice, z = z_slider)
     box_layout = Layout(align_items = 'center')
+
     display(HBox([w.children[1], w.children[0]], layout = box_layout))
+
+def plot_saliency_grid(image_data, saliency, overlay=False, cmap='gray', num_rows=3, num_columns=5, filename=None):
+    """This function plots the saliency map along with the input image (data) in a 3x5 grid.
+    
+    Args:
+        image_data (numpy array): image data to be plotted
+        saliency (numpy array): saliency map to be plotted
+        overlay (bool): whether to overlay saliency on image
+        num_slices (int): number of slices to show (default 15 for 3x5 grid)
+    """
+    num_slices=num_rows*num_columns
+
+    # Calculate slice indices to show
+    z_indices = np.linspace(0, image_data.shape[2]-1, num_slices, dtype=int)
+    
+    # Calculate global min/max values
+    max_saliency = np.max(saliency)
+    min_saliency = np.min(saliency)
+    max_image = np.max(image_data)
+    min_image = np.min(image_data)
+
+    for idx, z in enumerate(z_indices):
+        if overlay:      
+            # Plot overlaid images
+            plt.imshow(image_data[:, :, z].T, cmap='gray', origin='lower', vmin=min_image, vmax=max_image)
+            plt.imshow(saliency[:, :, z].T, cmap=cmap, origin='lower', alpha=0.5, vmin=min_saliency, vmax=max_saliency)
+            plt.title(f'z={z}')
+
+        else:
+            # Create side-by-side plots within each grid cell
+            plt.subplot(num_rows, num_columns*2, 2*idx + 1)
+            plt.imshow(image_data[:, :, z].T, cmap='gray', origin='lower', vmin=min_image, vmax=max_image)
+            plt.title(f'z={z}')
+            plt.axis('off')
+            
+            plt.subplot(num_rows, num_columns*2, 2*idx + 2)
+            plt.imshow(saliency[:, :, z].T, cmap=cmap, origin='lower', vmin=min_saliency, vmax=max_saliency)
+            plt.title(f'Saliency z={z}')
+            plt.axis('off')
+    
+    plt.suptitle('Axial Slices with Saliency Maps', fontsize=16)
+    plt.tight_layout()
+    if filename is not None:
+        plt.savefig(filename, format="svg", dpi=500)
+    plt.show()
+
+def make_gif_saliency(image_data, saliency,name):
+    frames = []
+    max_image=np.max(np.max(np.max(saliency)))
+    min_image=np.min(np.min(np.min(saliency)))
+    for z in range(image_data.shape[-1]):
+        plt.imshow(image_data[:, :, z].T, cmap = 'gray', origin = 'lower')
+        plt.imshow(saliency[:, :, z].T, cmap = 'jet', origin = 'lower',alpha=0.5,vmin=min_image,vmax=max_image)
+        plt.xticks(list(np.linspace(0, image_data.shape[0], 11)))
+        plt.yticks(list(np.linspace(0, image_data.shape[1], 11)))
+        plt.title(f'Axial Slice at z={z}')
+        plt.colorbar()
+        plt.tight_layout()
+        os.makedirs("./temp", exist_ok=True)
+        plt.savefig(f'./temp/frame_{z}.png', bbox_inches='tight', pad_inches=0)
+        plt.close()
+        frames.append(imageio.imread(f'./temp/frame_{z}.png'))
+        print(str(z)+"/"+str(image_data.shape[-1]))
+    os.makedirs("./images", exist_ok=True)
+    output_path = './images/'+name+'.gif'
+
+    imageio.mimsave(output_path, frames, duration=5,loop=0)  # Duration between frames in seconds
+    shutil.rmtree("./temp")
