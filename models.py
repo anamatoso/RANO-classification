@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class AlexNet3D(nn.Module): # Needs a lot of memory
+class AlexNet3D(nn.Module):
     def __init__(self, num_channels=2,num_classes=4):
         super(AlexNet3D, self).__init__()
         
@@ -50,6 +50,42 @@ class AlexNet3D(nn.Module): # Needs a lot of memory
         x = self.classifier(x)
         return x
 
+class DenseNetWithClinical(nn.Module):
+    def __init__(self, densenet_model, num_classes, clinical_data_dim, hidden_dim=256):
+        super(DenseNetWithClinical, self).__init__()
+        
+        # Initialize DenseNet (without its classification layer)
+        self.densenet = densenet_model
+        # Remove the last fully connected (classification) layer of DenseNet
+        self.densenet.class_layers.out = nn.Identity()
+
+        # Define a fully connected layer to process clinical data
+        self.clinical_fc = nn.Sequential(
+            nn.Linear(clinical_data_dim, hidden_dim),
+            nn.ReLU()
+        )
+        
+        # Define the fully connected layer that concatenates both features
+        densenet_output_dim = 2688  # For DenseNet264, output after pooling is 2688
+        combined_dim = densenet_output_dim + hidden_dim
+        self.final_fc = nn.Sequential(
+            nn.Linear(combined_dim, num_classes)
+        )
+
+    def forward(self, image, clinical_data):
+        # Forward pass through DenseNet for image features
+        image_features = self.densenet(image)
+        
+        # Forward pass through clinical data processing layers
+        clinical_features = self.clinical_fc(clinical_data)
+        
+        # Concatenate both image and clinical features
+        combined_features = torch.cat((image_features, clinical_features), dim=1)
+        
+        # Final classification layer
+        output = self.final_fc(combined_features)
+        return output
+    
 class Inception3DModule(nn.Module):
     def __init__(self, in_channels, out1x1, red3x3, out3x3, red5x5, out5x5, pool_proj):
         super(Inception3DModule, self).__init__()
