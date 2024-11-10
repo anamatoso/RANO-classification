@@ -9,6 +9,9 @@ import resource
 
 import monai
 import torch
+import monai
+import torch.nn as nn
+from monai.networks.nets import DenseNet264
 from IPython.display import clear_output
 from monai.utils import set_determinism
 
@@ -52,16 +55,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Process some integers.')
 
     # Adding arguments
-    parser.add_argument('--binary_classes', action = 'store_true', default = False,
+    parser.add_argument('--binary_classes', action = 'store_true',
                         help = 'a boolean flag for binary classes')
-    parser.add_argument('--mods_keep', type = validate_mods_keep, default = ["CT1",
-                                                                              "T1", "T2", "FLAIR"],
+    parser.add_argument('--mods_keep', type = validate_mods_keep, default = ["CT1", "T1", "T2", "FLAIR"],
                         help = 'a list of strings, defaults to ["CT1", "T1", "T2", "FLAIR"]')
     parser.add_argument('--model_name', type = str, required = True,
                         help = 'the name of the model, mandatory argument')
     parser.add_argument('--n_folds', type = int, default = 5,
                         help = 'an integer for number of folds, defaults to 5')
-    parser.add_argument('--subtract', action = 'store_true', default = False,
+    parser.add_argument('--subtract', action = 'store_true',
                         help = 'a boolean flag for subtract, defaults to True')
     parser.add_argument('--n_epochs', type = int, default = 100,
                         help = 'an integer for number of epochs, defaults to 100')
@@ -73,19 +75,22 @@ def parse_args():
                         help = 'an integer for weight_decay, defaults to 0.01')
     parser.add_argument('--patience', type = int, default = 10,
                         help = 'an integer for patience, defaults to 10')
-    parser.add_argument('--decrease_LR', action = 'store_true', default = False,
+    parser.add_argument('--decrease_LR', action = 'store_true',
                         help = 'a boolean flag for subtract, defaults to True')
-    parser.add_argument('--stop_decrease', action = 'store_true', default = False,
+    parser.add_argument('--stop_decrease', action = 'store_true',
                         help = 'a boolean flag for stop_decrease, defaults to True')
     parser.add_argument('--dec_LR_factor', type = int, default = 10,
                         help = 'an integer for dec_LR_factor, defaults to 10')
-    parser.add_argument('--loss_weight', type = str, default = "equal",
-                        help = "loss function weight on classes, defaults to equal weights. "+
-                        "Options are: equal, 1-prev, 1/prev.")
+    parser.add_argument('--loss_weight', type = str, default = "1/prev",
+                        help = 'loss function weight on classes, defaults to 1/prevalence weights. Options are: equal, 1-prev, 1/prev.')
+    parser.add_argument('--loss', type = str, default = "CE",
+                        help = 'loss function, defaults to Cross entropy. Options are: CE, FL.')
     parser.add_argument('--sampler_weight', type = str, default = "1-prev",
-                        help = "loss function weight on classes, defaults to 1-prevalence of"+
-                        "class due to the class inbalance. Options are: equal, 1-prev, 1/prev.")
-
+                        help = 'loss function weight on classes, defaults to 1-prevalence of class due to the class inbalance. Options are: equal, 1-prev, 1/prev.')
+    parser.add_argument('--pretraining', type = int, default = 0,
+                        help = 'which pretraining to use')
+    parser.add_argument('--clinical_data', action = 'store_true',
+                        help = 'whether to use clinical data')
     args = parser.parse_args()
     return args
 # %%
@@ -114,18 +119,21 @@ if __name__ == '__main__':
     DECREASE_LR    = arguments.decrease_LR
     STOP_DECREASE  = arguments.stop_decrease
     DEC_LR_FACTOR  = arguments.dec_LR_factor
+    LOSS           = arguments.loss
+    PRETRAINING    = arguments.pretraining
+    CLINICAL_DATA  = arguments.clinical_data
 
     SEED = 2
     set_determinism(SEED)
 
     # Get table with data info
     print("Getting data...")
-    with open(os.path.join(MAIN_DIR, "table_all.pkl"), "rb") as f:
-        TABLE_ALL = pickle.load(f)
+    with open(os.path.join(MAIN_DIR, "table_classifyable.pkl"), "rb") as f:
+        TABLE_CLASSIFYABLE = pickle.load(f)
 
     # Create the data, get transforms and number of channels
     data,  transforms_train, transforms_test, \
-        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_ALL, CLASSES, SUBTRACT)
+        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFYABLE, CLASSES, SUBTRACT, CLINICAL_DATA)
 
     if CONVERT_BIN:
         data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, CLASSES, DATASET)
@@ -149,10 +157,67 @@ if __name__ == '__main__':
                                                                                 DEVICE,
                                                                                 LEARNINIG_RATE,
                                                                                 WEIGHT_DECAY,
+                                                                                LOSS,
                                                                                 LOSS_WEIGHT,
                                                                                 num_channels,
                                                                                 NUM_CLASSES)
         model.apply(init_weights)
+        if PRETRAINING !=0:
+      
+            if PRETRAINING==3:# MEDMNIST but copying weights of first layer throughout the channels
+                # Get pretrained model
+                pretrained_model=DenseNet264(spatial_dims=3, in_channels=1, out_channels=11, pretrained=False)
+                pretrained_model.load_state_dict(torch.load(os.path.join(LOGS_FOLDER, "medmnist", "medmnist.pt"), map_location=DEVICE))
+                pretrained_dict = pretrained_model.state_dict()
+            
+                # Copy the layers that we are able to copy
+                model_dict = model.state_dict()
+                compatible_weights = {k: v for k, v in pretrained_dict.items() if k in model_dict and v.size() == model_dict[k].size()}
+                model_dict.update(compatible_weights)
+                model.load_state_dict(model_dict)
+            
+                # Create new convolutional layer with size equal to what we need and copy weights channel wise
+                pretrained_conv1_weights = pretrained_model.features.conv0.weight  # Shape: (64, 1, k_d, k_h, k_w)
+                new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0], kernel_size=pretrained_model.features.conv0.kernel_size, stride=pretrained_model.features.conv0.stride, padding=pretrained_model.features.conv0.padding, bias=(pretrained_model.features.conv0.bias is not None))
+                new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+                new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+                
+                # Replace first layer of our model with this one
+                model.features.conv0 = new_conv1.to(DEVICE)
+            
+            elif PRETRAINING==4: #medicalnet
+                model.load_state_dict(torch.load(os.path.join(MAIN_DIR, "medicalnet", "resnet_18_23dataset.pth"), map_location=DEVICE), strict = False)
+
+                # Create new convolutional layer with size equal to what we need and copy weights channel wise
+                pretrained_conv1_weights = model.conv1.weight  # Shape: (64, 1, k_d, k_h, k_w)
+                new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0], kernel_size=model.conv1.kernel_size, stride=model.conv1.stride, padding=model.conv1.padding, bias=(model.conv1.bias is not None))
+                new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+                new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+                
+                # Replace first layer of our model with this one
+                model.conv1 = new_conv1
+                
+            elif PRETRAINING==5:# Pretraining with classifying rotations
+                # Get pretrained model
+                pretrained_model=DenseNet264(spatial_dims=3, in_channels=1, out_channels=6, pretrained=False)
+                pretrained_model.load_state_dict(torch.load(os.path.join(LOGS_FOLDER, "rotations", "rotations.pt"), map_location=DEVICE))
+                pretrained_dict = pretrained_model.state_dict()
+            
+                # Copy the layers that we are able to copy
+                model_dict = model.state_dict()
+                compatible_weights = {k: v for k, v in pretrained_dict.items() if k in model_dict and v.size() == model_dict[k].size()}
+                model_dict.update(compatible_weights)
+                model.load_state_dict(model_dict)
+            
+                # Create new convolutional layer with size equal to what we need and copy weights channel wise
+                pretrained_conv1_weights = pretrained_model.features.conv0.weight  # Shape: (64, 1, k_d, k_h, k_w)
+                new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0], kernel_size=pretrained_model.features.conv0.kernel_size, stride=pretrained_model.features.conv0.stride, padding=pretrained_model.features.conv0.padding, bias=(pretrained_model.features.conv0.bias is not None))
+                new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+                new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+                
+                # Replace first layer of our model with this one
+                model.features.conv0 = new_conv1
+
         clear_output()
 
         print("Learning with model "+ MODEL_NAME)
@@ -166,7 +231,7 @@ if __name__ == '__main__':
         train(LOG_DIR, writer, train_loader, test_loader, MODEL_NAME,
               dataset, DEVICE, arguments.learning_rate, N_EPOCHS, OPTIMIZER,
               SEED, WEIGHT_DECAY, LOSS_FUNCTION, model, STOP_DECREASE, DECREASE_LR,
-              DEC_LR_FACTOR, PATIENCE)
+              DEC_LR_FACTOR, PATIENCE, CLINICAL_DATA)
 
         # Test model with unseen data
         print("----------")
@@ -183,6 +248,9 @@ if __name__ == '__main__':
         result["model"] = MODEL_NAME
         result["loss_weight"] = LOSS_WEIGHT
         result["sampler_weight"] = SAMPLER_WEIGHT
+        result["loss"]=arguments.loss
+        result["pretraining"]=arguments.pretraining
+        result["clinical_data"]=arguments.clinical_data
 
         print(result)
         with open('results.csv', 'a', encoding=None) as file:
