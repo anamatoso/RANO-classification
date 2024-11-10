@@ -10,7 +10,8 @@ from utils import (check_files_in_subdirectories, create_count_column,
                    remove_timepoints_rano)
 
 DATA_DIR = "./LUMIERE/Imaging"
-
+DATASETS =  [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"], 
+             ["T1","T2","FLAIR"],["T1","FLAIR"]]
 #%% Load data - create table all
 
 # Import CSVs
@@ -35,23 +36,27 @@ TABLE_ALL.reset_index(drop=True, inplace=True)
 
 # Create columns for knowing how many past images each timepoint 
 # has (agreggated by groups of images)
-for images in [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"],
-               ["T1","T2","FLAIR"],["T1","FLAIR"]]:
+for images in DATASETS:
     name = "_".join(images) + "_count"
     create_count_column(TABLE_ALL, images, name)
 del name, images
 
-# Save table
-with open("table_all.pkl","wb") as f:
-    pickle.dump(TABLE_ALL,f)
-del f
+# Save table with classifyable timepoints
+CLASSIFYABLE = TABLE_ALL[
+    (TABLE_ALL['LessThan3Months'] == False) & # LessThan3Months must be False
+    (TABLE_ALL['RANO'] != "Pre-Op") &         # RANO must not be "Pre-Op"
+    (TABLE_ALL['RANO'] != "Post-Op") &        # RANO must not be "Post-Op"
+    (TABLE_ALL['RANO'] is not False) &        # RANO must not be False
+    (TABLE_ALL['RANO'] != "Post-Op/PD") &     # RANO must not be "Post-Op/PD"
+    (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False)) # RatingRationale must not contain "RANO"
+]
+CLASSIFYABLE.to_pickle('./table_classifyable.pkl')
 
 #%% Create datasets with classifyable data
 
 DATASETS_DIR = "./Datasets"
 
-for images_to_count in [["CT1", "T1", "T2", "FLAIR"],
-                        ["CT1", "FLAIR"],["T1", "T2", "FLAIR"],["T1", "FLAIR"],["CT1"]]:
+for images_to_count in DATASETS:
     mods_to_count = "_".join(images_to_count)
     print("Doing "+mods_to_count+ " dataset")
     table_classifyable = remove_timepoints_rano(TABLE_ALL) # remove less than 3 months and pre and post op

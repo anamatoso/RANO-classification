@@ -3,6 +3,7 @@
 """
 # Imports
 import os
+import sys
 
 from utils import (apply_transform, calculate_isotropy, extract_firstvolume,
                    force_delete_file, get_resolution, preprocess, register)
@@ -10,10 +11,12 @@ from utils import (apply_transform, calculate_isotropy, extract_firstvolume,
 # Define folders
 ATLAS_FOLDER    = "./atlases"
 DATA_DIR        = "./LUMIERE/Imaging"
-MODALITIES=["CT1","T1","T2","FLAIR"]
+MODALITIES      = ["CT1","T1","T2","FLAIR"]
 
 #%%
 # Extract first volume of SRI atlases (T1 and T2)
+if not os.path.exists(os.path.join(ATLAS_FOLDER,"SRI24_T1_brain.nii")) or not os.path.exists(os.path.join(ATLAS_FOLDER,"SRI24_T2_brain.nii")):
+    sys.exit("The T1 and T2 atlases must exist in the atlas folder.")
 extract_firstvolume(os.path.join(ATLAS_FOLDER,"SRI24_T1_brain.nii"),
                     os.path.join(ATLAS_FOLDER,"sri24_T1_3D.nii.gz"))
 print("First volume of T1 atlas extracted.")
