@@ -35,14 +35,14 @@ TABLE_ALL.sort_values(by=['Patient', 'Timepoint'], inplace=True)
 TABLE_ALL.reset_index(drop=True, inplace=True)
 
 # Create columns for knowing how many past images each timepoint 
-# has (agreggated by groups of images)
+# has (aggregated by groups of images)
 for images in DATASETS:
     name = "_".join(images) + "_count"
     create_count_column(TABLE_ALL, images, name)
 del name, images
 
-# Save table with classifyable timepoints
-CLASSIFYABLE = TABLE_ALL[
+# Save table with classifiable timepoints
+CLASSIFIABLE = TABLE_ALL[
     (TABLE_ALL['LessThan3Months'] == False) & # LessThan3Months must be False
     (TABLE_ALL['RANO'] != "Pre-Op") &         # RANO must not be "Pre-Op"
     (TABLE_ALL['RANO'] != "Post-Op") &        # RANO must not be "Post-Op"
@@ -50,43 +50,43 @@ CLASSIFYABLE = TABLE_ALL[
     (TABLE_ALL['RANO'] != "Post-Op/PD") &     # RANO must not be "Post-Op/PD"
     (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False)) # RatingRationale must not contain "RANO"
 ]
-CLASSIFYABLE.to_pickle('./table_classifyable.pkl')
+CLASSIFIABLE.to_pickle('./table_classifiable.pkl')
 
-#%% Create datasets with classifyable data
+#%% Create datasets with classifiable data
 
 DATASETS_DIR = "./Datasets"
 
 for images_to_count in DATASETS:
     mods_to_count = "_".join(images_to_count)
     print("Doing "+mods_to_count+ " dataset")
-    table_classifyable = remove_timepoints_rano(TABLE_ALL) # remove less than 3 months and pre and post op
+    table_classifiable = remove_timepoints_rano(TABLE_ALL) # remove less than 3 months and pre- and post-op
 
     # Create has past column to remove the timepoints that have less timepoints in the past than what we want
     column = mods_to_count + "_count"
-    table_classifyable['has_past'] = table_classifyable[column] > 1 # How many past images we want
+    table_classifiable['has_past'] = table_classifiable[column] > 1 # How many past images we want
 
-    table_classifyable.drop((table_classifyable[table_classifyable['has_past'] == False]).index,inplace = True)
+    table_classifiable.drop((table_classifiable[table_classifiable['has_past'] == False]).index, inplace = True)
 
     ## Create folder for links to usable data
 
-    # one folder per classifyable timepoint with past image(s)
+    # one folder per classifiable timepoint with past image(s)
     sub.call(["rm", "-rf", os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1")])
     count = 0
-    for ind in table_classifyable.index[::-1]: #this index is the same as in table all
+    for ind in table_classifiable.index[::-1]: #this index is the same as in table all
         count += 1
         path = os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1",
-                            table_classifyable["Patient"][ind] + "_" + table_classifyable["Timepoint"][ind])
+                            table_classifiable["Patient"][ind] + "_" + table_classifiable["Timepoint"][ind])
         os.makedirs(path, exist_ok = True)
 
         for mod in images_to_count:
             # Add images of current timepoint
-            image = os.path.join(DATA_DIR, table_classifyable["Patient"][ind],
-                                 table_classifyable["Timepoint"][ind], mod + "_tostd.nii.gz")
+            image = os.path.join(DATA_DIR, table_classifiable["Patient"][ind],
+                                 table_classifiable["Timepoint"][ind], mod + "_tostd.nii.gz")
             if os.path.exists(image) and not os.path.exists(os.path.join(path, mod + ".nii.gz")):
                 os.symlink(image, os.path.join(path, mod + ".nii.gz"))
 
             # Add images from timepoints from before
-            image = os.path.join(DATA_DIR, table_classifyable["Patient"][ind],
+            image = os.path.join(DATA_DIR, table_classifiable["Patient"][ind],
                                  TABLE_ALL["Timepoint"][ind-1], mod + "_tostd.nii.gz")
             if os.path.exists(image) and not os.path.exists(os.path.join(path,
                                                                          mod + "_T-1.nii.gz")):

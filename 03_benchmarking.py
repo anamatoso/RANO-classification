@@ -7,7 +7,6 @@ import os
 import pickle
 import resource
 
-import monai
 import torch
 import monai
 import torch.nn as nn
@@ -86,7 +85,7 @@ def parse_args():
     parser.add_argument('--loss', type = str, default = "CE",
                         help = 'loss function, defaults to Cross entropy. Options are: CE, FL.')
     parser.add_argument('--sampler_weight', type = str, default = "1-prev",
-                        help = 'loss function weight on classes, defaults to 1-prevalence of class due to the class inbalance. Options are: equal, 1-prev, 1/prev.')
+                        help = 'loss function weight on classes, defaults to 1-prevalence of class due to the class imbalance. Options are: equal, 1-prev, 1/prev.')
     parser.add_argument('--pretraining', type = int, default = 0,
                         help = 'which pretraining to use')
     parser.add_argument('--clinical_data', action = 'store_true',
@@ -109,7 +108,7 @@ if __name__ == '__main__':
     MODEL_NAME     = arguments.model_name
     BS             = arguments.batch_size
     N_EPOCHS       = arguments.n_epochs
-    LEARNINIG_RATE = arguments.learning_rate
+    LEARNING_RATE = arguments.learning_rate
     WEIGHT_DECAY   = arguments.weight_decay
     PATIENCE       = arguments.patience
     LOSS_WEIGHT    = arguments.loss_weight
@@ -128,17 +127,17 @@ if __name__ == '__main__':
 
     # Get table with data info
     print("Getting data...")
-    with open(os.path.join(MAIN_DIR, "table_classifyable.pkl"), "rb") as f:
-        TABLE_CLASSIFYABLE = pickle.load(f)
+    with open(os.path.join(MAIN_DIR, "table_classifiable.pkl"), "rb") as f:
+        TABLE_CLASSIFIABLE = pickle.load(f)
 
     # Create the data, get transforms and number of channels
     data,  transforms_train, transforms_test, \
-        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFYABLE, CLASSES, SUBTRACT, CLINICAL_DATA)
+        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFIABLE, CLASSES, SUBTRACT)
 
     if CONVERT_BIN:
-        data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, CLASSES, DATASET)
+        data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, DATASET)
 
-    # Divide data into train and test set and create each dataloader
+    # Divide data into train and test set and create each data loader
     print("Creating train and validation datasets...")
     folds = monai.data.utils.partition_dataset_classes(data, labels,
                                                        num_partitions = arguments.n_folds,
@@ -155,15 +154,13 @@ if __name__ == '__main__':
         MODEL_CONFIG, model, WEIGHT, OPTIMIZER, LOSS_FUNCTION = get_model_setup(MODEL_NAME,
                                                                                 class_prevalence,
                                                                                 DEVICE,
-                                                                                LEARNINIG_RATE,
+                                                                                LEARNING_RATE,
                                                                                 WEIGHT_DECAY,
-                                                                                LOSS,
                                                                                 LOSS_WEIGHT,
                                                                                 num_channels,
                                                                                 NUM_CLASSES)
         model.apply(init_weights)
         if PRETRAINING !=0:
-      
             if PRETRAINING==3:# MEDMNIST but copying weights of first layer throughout the channels
                 # Get pretrained model
                 pretrained_model=DenseNet264(spatial_dims=3, in_channels=1, out_channels=11, pretrained=False)
@@ -221,7 +218,7 @@ if __name__ == '__main__':
         clear_output()
 
         print("Learning with model "+ MODEL_NAME)
-        LOG_DIR, writer = create_tensorboard(N_EPOCHS, BS, LEARNINIG_RATE, LOGS_FOLDER,
+        LOG_DIR, writer = create_tensorboard(N_EPOCHS, BS, LEARNING_RATE, LOGS_FOLDER,
                                              DEVICE, MODEL_NAME, DATASET, SUBTRACT,
                                              WEIGHT_DECAY, WEIGHT, LOSS_FUNCTION,
                                              STOP_DECREASE, DECREASE_LR, SAMPLER_WEIGHT,
@@ -229,21 +226,21 @@ if __name__ == '__main__':
 
 
         train(LOG_DIR, writer, train_loader, test_loader, MODEL_NAME,
-              dataset, DEVICE, arguments.learning_rate, N_EPOCHS, OPTIMIZER,
-              SEED, WEIGHT_DECAY, LOSS_FUNCTION, model, STOP_DECREASE, DECREASE_LR,
+              DATASET, DEVICE, arguments.learning_rate, N_EPOCHS, OPTIMIZER,
+              SEED, WEIGHT_DECAY, LOSS_FUNCTION, model, DECREASE_LR,
               DEC_LR_FACTOR, PATIENCE, CLINICAL_DATA)
 
         # Test model with unseen data
         print("----------")
         print("Testing model with unseen data...")
         result, _, _ = test(MODEL_CONFIG, LOG_DIR, DATASET, DEVICE, BS,
-                            CLASSES, test_loader, MODEL_NAME)
+                            CLASSES, test_loader, MODEL_NAME, CLINICAL_DATA)
         result["Binary"] = CONVERT_BIN
-        result["Modalaties"] = DATASET
+        result["Modalities"] = DATASET
         result["Fold"] = fold
         result["Subtract"] = SUBTRACT
         result["n_epochs"] = N_EPOCHS
-        result["learning_rate"] = LEARNINIG_RATE
+        result["learning_rate"] = LEARNING_RATE
         result["batch_size"] = BS
         result["model"] = MODEL_NAME
         result["loss_weight"] = LOSS_WEIGHT
@@ -253,8 +250,7 @@ if __name__ == '__main__':
         result["clinical_data"]=arguments.clinical_data
 
         print(result)
-        with open('results.csv', 'a', encoding=None) as file:
-            writer = csv.DictWriter(file, fieldnames = result.keys())
-            writer.writerow(result)
-            file.close()
+        with open('results.csv', 'a', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            writer.writerow(result.values())
         print("Ended Fold "+str(fold+1)+"/"+str(arguments.n_folds))

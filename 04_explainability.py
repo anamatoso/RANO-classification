@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as func
 
 from captum.attr import Saliency
 from pytorch_grad_cam import GradCAM
@@ -62,13 +62,13 @@ log_dir        = os.path.join(logs_folder,experiment)
 print("Getting data...")
 
 # Get table with data info
-with open(os.path.join(phd_dir,"table_classifyable.pkl"), "rb") as f:
-    all = pickle.load(f)
+with open(os.path.join(phd_dir,"table_classifiable.pkl"), "rb") as f:
+    table_all = pickle.load(f)
 
 # Create the data, get transforms and number of channels
-data,  _, transforms_test, num_channels, labels = get_data_and_transforms(data_dir, all, classes, subtract, clinical_data)
+data,  _, transforms_test, num_channels, labels = get_data_and_transforms(data_dir, table_all, classes, subtract, clinical_data)
 
-#%% Divide data into train and test set and create dataloader
+#%% Divide data into train and test set and create data loader
 
 print("Creating train and validation datasets...")
 
@@ -99,7 +99,7 @@ elif model_name == "monai_densenet264":
 elif model_name == "monai_vit":
     model_config  = ViT(in_channels=num_channels, img_size=[240,240,155], patch_size=[20,20,10], classification=True, num_classes=num_classes, pos_embed_type='sincos', dropout_rate=0.1)
 elif model_name == "monai_resnet":
-    model_config  = ResNet("Bottleneck", (3, 4, 6, 3), (64, 128, 256, 512), spatial_dims=3, n_input_channels=num_channels, num_classes=num_classes)
+    model_config  = ResNet("Bottleneck", [3, 4, 6, 3], [64, 128, 256, 512], spatial_dims=3, n_input_channels=num_channels, num_classes=num_classes)
 elif model_name == "AlexNet3D":
     model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
 elif model_name == "medicalnet_resnet18":
@@ -108,7 +108,7 @@ elif model_name == "medicalnet_resnet18":
 elif model_name == "densenet264clinical":
     image_model  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
     model_config = DenseNetWithClinical(densenet_model=image_model, num_classes=num_classes, clinical_data_dim=5)
-else: sys.exit('Please choose one of the models available. You didnt write any one of them')
+else: sys.exit('Please choose one of the models available. You did not write any one of them')
 print("Model imported")
 
 # Load the pre-trained model
@@ -130,7 +130,7 @@ while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change t
     input_tensor = input_item["images"]
     print("batch loaded")
     print(input_item["label"])
-# %% GRADCAM
+# %% GRAD-CAM
 
 outputs=model(input_tensor.to(device))
 class_pred = int(torch.max(outputs))
@@ -151,13 +151,9 @@ grayscale_cam_real = grayscale_cam_real[0, :]
 grayscale_cam_pred = grayscale_cam_pred[0, :]
 
 plot_saliency_grid(input_tensor[0,-3,:,:,:],grayscale_cam_real,
-                    overlay=True, cmap="jet", filename="images/final/gradcam_c"+str(class_real)+".svg")
+                    overlay=True, cmap="jet", filename="images/final/grad-cam_c"+str(class_real)+".svg")
 plot_saliency_grid(input_tensor[0,-3,:,:,:],grayscale_cam_pred, 
-                    overlay=True, cmap="jet", filename="images/final/gradcam_c"+str(class_real)+"_pred.svg")
-
-#plot_saliency_grid(input_tensor[0,-3,:,:,:],grayscale_cam, overlay=True, cmap="jet", filename=None)
-
-#make_gif_saliency(input_tensor[0,-3,:,:,:],grayscale_cam,"GradCAM-Layer_"+str(9)+"-target0")
+                    overlay=True, cmap="jet", filename="images/final/grad-cam_c"+str(class_real)+"_pred.svg")
 
 # %% Captum
 
@@ -165,8 +161,8 @@ _, predicted = torch.max(outputs, 1)
 input_tensor.requires_grad=True
 print('Ground truth:', classes[input_item["label"].argmax()], "\n",
     'Predicted:', classes[predicted], "\n",
-    'Probability:', torch.max(F.softmax(outputs, 1)).item(),"\n",
-    'Probability for all classes:', np.round(F.softmax(outputs, 1).tolist()[0],3)
+    'Probability:', torch.max(func.softmax(outputs, 1)).item(),"\n",
+    'Probability for all classes:', np.round(func.softmax(outputs, 1).tolist()[0],3)
     )
 
 model.to("cpu")

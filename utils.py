@@ -1,4 +1,4 @@
-""" Auxilliary file with utils functions
+""" Auxiliary file with utils functions
 """
 
 import os
@@ -22,7 +22,7 @@ from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as func
 from torch.utils.data import WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 
@@ -140,7 +140,7 @@ def change_datatype(filename, newtype = "uint16"):
 
     Args:
         filename (str): path of the image
-        type (str, optional): data type to change the image to. Defaults to "uint16".
+        newtype (str, optional): data type to change the image to. Defaults to "uint16".
     """
     image = nib.load(filename)
     data = image.get_fdata()
@@ -273,34 +273,29 @@ def preprocess(image, output, use_fsl=False):
                  "temp_reoriented_fov_bias_denoise.nii.gz"]:
         force_delete_file(os.path.join(os.getcwd(),file))
 
-def create_count_column(table_all, images, name_column, logic = "and"):
+def create_count_column(table_all, images, name_column):
     """This function will create a new column in the table_all dataframe named name_column that will count how many past images (of the images list) using the logic that each timepoint has in its past (and present)
 
     Args:
         table_all (dataframe): dataframe that will be modified
         images (list): list of images to count
         name_column (string): name of the new column that will be added
-        logic (str, optional): logic with which to count the images. Defaults to "and".
     """
 
-    def have_image(row, images, logic="and"):
+    def have_image(row, list_images):
         """This function returns true if the row in the table has the images in the list, following the AND or OR logic
     Args:
         row (series): Row of the dataframe
         logic (str, optional): Logic to determine if the row has the images. Defaults to "or".
+        list_images (list): list of images
     Returns:
         bool: True if the patient has the images with the logic and false otherwise
     """
-        if logic == "or":
-            found = False
-            for image in images:
-                if row[image]:
-                    found=True
-        else: #logic== "and"
-            found = True
-            for image in images:
-                if not row[image]:
-                    found=False
+
+        found = True
+        for image in list_images:
+            if not row[image]:
+                found=False
         return found
 
     table_all[name_column] = 0
@@ -317,7 +312,7 @@ def create_count_column(table_all, images, name_column, logic = "and"):
                 if index2>index: # Counts with the current image
                     continue
                 else:
-                    if have_image(row2,images,logic): 
+                    if have_image(row2,images):
                         count += 1
                     else: break
             table_all.at[index, name_column] = count
@@ -325,44 +320,44 @@ def create_count_column(table_all, images, name_column, logic = "and"):
 
 
 def remove_timepoints_rano(table_all):
-    """This function removes the rows that dont have the basic criteria for RANO classification
+    """This function removes the rows that do not have the basic criteria for RANO classification
 
     Args:
         table_all (dataframe): table with rows to be removed
-        table_classifyable (dataframe): final table
     """
-    # Remove pre and post op classifications and non existing
+    # Remove pre- and post-op classifications and non-existing
     to_delete=["Post-Op", "Pre-Op", False, "Post-Op/PD"]
-    table_classifyable=table_all.copy(deep=True)
+    table_classifiable=table_all.copy(deep=True)
     for c in to_delete:
-        condition = table_classifyable["Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)"] == c
-        table_classifyable.drop(table_classifyable[condition].index,inplace=True)
+        condition = table_classifiable["Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)"] == c
+        table_classifiable.drop(table_classifiable[condition].index,inplace=True)
 
     # Remove rows where less than 3 months column is true
-    condition = table_classifyable['LessThan3Months'] == True
-    table_classifyable.drop(table_classifyable[condition].index,inplace=True)
+    condition = table_classifiable['LessThan3Months'] == True
+    table_classifiable.drop(table_classifiable[condition].index,inplace=True)
 
     # remove less than 3 months in the rationale column
     to_delete=["less than 3 months", "Less than 3 months", "Not a timepoint for RANO measurement"]
     for c in to_delete:
-        condition = table_classifyable['Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)'].str.startswith(c,na=False)
-        table_classifyable.drop(table_classifyable[condition].index,inplace=True)
-    return table_classifyable
+        condition = table_classifiable['Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)'].str.startswith(c,na=False)
+        table_classifiable.drop(table_classifiable[condition].index,inplace=True)
+    return table_classifiable
 
-def probs2logits(probs, device="cpu"):
+def probs2logits(probabilities, device="cpu"):
     """This function, given a tensor with class probabilities in each row, 
     turns each row into the corresponding logit
 
     Args:
-        probs (tensor): Tensor of class probabilities
+        probabilities (tensor): Tensor of class probabilities
+        device (string): device in which computation is made
 
     Returns:
         tensor: Tensor of logits
     """
     
-    max_indices = torch.argmax(probs, dim=1)
-    logits=torch.zeros(probs.size(),device=device)
-    logits[torch.arange(probs.size(0)), max_indices] = 1
+    max_indices = torch.argmax(probabilities, dim=1)
+    logits=torch.zeros(probabilities.size(), device=device)
+    logits[torch.arange(probabilities.size(0)), max_indices] = 1
     return logits
 
 def check_files_in_subdirectories(root_dir, target_files):
@@ -380,7 +375,7 @@ def check_files_in_subdirectories(root_dir, target_files):
             if file not in files:
                 print(f"File '{file}' not found in directory: {root}")
 
-def convert2binary(data, labels, classes, dataset):
+def convert2binary(data, labels, dataset):
     """This function converts the labels in the dataset (4 classes) 
     into binary (2 classes) by performing the following assignment:
     0 -> 0
@@ -388,7 +383,8 @@ def convert2binary(data, labels, classes, dataset):
 
     Args:
         data (_type_): _description_
-        labels (_type_): _description_
+        labels (list): list of labels of data
+        dataset (string): name of the dataset
 
     Returns:
         list: 
@@ -401,8 +397,8 @@ def convert2binary(data, labels, classes, dataset):
             data[i]["label"] = torch.tensor([1, 0], dtype = torch.float32)
     classes      = ["PD", "other"]
     num_classes  = len(classes)
-    dataset      = dataset + "_bin"
-    return data, labels, classes, num_classes, dataset
+    new_dataset  = dataset + "_bin"
+    return data, labels, classes, num_classes, new_dataset
 
 
 def get_data_and_transforms(data_dir, table_all, classes, subtract):
@@ -413,6 +409,7 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
         data_dir (string): path to the dataset directory
         table_all (dataframe): dataframe with all the RANO info needed regarding with data to use
         classes (list): list of classes
+        subtract (bool): whether to perform subtration between the two timepoints
 
     Returns:
         list: list with a dictionary for classifiable timepoint, 
@@ -440,11 +437,10 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
         label=classes.index(rano)
         labels.append(label)
         # Turn classes into logits
-        logits = F.one_hot(torch.tensor(label), num_classes=n_classes)
+        logits = func.one_hot(torch.tensor(label), num_classes=n_classes)
 
         # Create dictionary to store the timepoint's images and its label
-        timepoint_dict={}
-        timepoint_dict["label"]=logits
+        timepoint_dict= {"label": logits}
 
         # Add modalities present to dictionary
         available_mods = [mod for mod in ["CT1", "T1", "T2", "FLAIR"]
@@ -543,9 +539,10 @@ def get_loaders(classes, bs, sampler_weight, transforms_train, transforms_test, 
             label = d["label"].argmax()
             if sampler_weight == "1/prev":
                 weight = 1.0 / class_prevalence[label]
+                weights.append(weight)
             elif sampler_weight == "1-prev":
-                weight = 1.0 - class_prevalence[label] 
-            weights.append(weight)
+                weight = 1.0 - class_prevalence[label]
+                weights.append(weight)
 
         # Create WeightedRandomSampler
         weights = torch.DoubleTensor(weights)
@@ -575,7 +572,7 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
     elif model_name == "monai_vit":
         model_config  = ViT(in_channels = num_channels, img_size = [240, 240, 155], patch_size = [20, 20, 10], classification = True, num_classes = num_classes, pos_embed_type = 'sincos', dropout_rate = 0.1)
     elif model_name == "monai_resnet":
-        model_config  = ResNet("bottleneck", (3, 4, 6, 3), (64, 128, 256, 512), spatial_dims = 3, n_input_channels = num_channels, num_classes = num_classes)
+        model_config  = ResNet("bottleneck", [3, 4, 6, 3], [64, 128, 256, 512], spatial_dims = 3, n_input_channels = num_channels, num_classes = num_classes)
     elif model_name == "AlexNet3D":
         model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
     elif model_name == "medicalnet_resnet18":
@@ -584,10 +581,10 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
     elif model_name == "densenet264clinical":
         image_model  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
         model_config = DenseNetWithClinical(densenet_model=image_model, num_classes=num_classes, clinical_data_dim=5)
-    else: sys.exit('Please choose one of the models available. You didnt write any one of them')
+    else: sys.exit('Please choose one of the models available. You did not write any one of them')
 
     model     = model_config.to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), learning_rate, weight_decay = weight_decay) # torch.optim.SGD(model.parameters(), learning_rate, weight_decay = weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), learning_rate, weight_decay = weight_decay)
 
     # Define weight of loss function
     if loss_weight == "equal": 
@@ -596,6 +593,8 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
         weight = torch.tensor([1/a for a in class_prevalence], dtype = torch.float32).to(device)
     elif loss_weight=="1-prev":
         weight = torch.tensor([1-a for a in class_prevalence], dtype = torch.float32).to(device)
+    else:
+        sys.exit('Please choose one of the weighting types available.')
 
     # Define loss function
     if num_classes ==2:
@@ -634,7 +633,7 @@ def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
         bs (int): batch size
         learning_rate (float): learning rate for the optimizer
         logs_folder (str): folder where the logs will be saved
-        device (str): name of device
+        device (device): name of device
         model_name (str): name of model to use
         dataset (str): name of to get dataset
         subtract (bool): whether to subtract images of consecutive timepoints
@@ -683,7 +682,7 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
         train_loader (dataloader): dataloader of training data
         test_loader (dataloader): dataloader of test data
         model_name (str): name of the model to use
-        device (str): name of device
+        device (device): name of device
         learning_rate (float): learning rate for the optimizer
         n_epochs (int): number of (maximum) epochs
         optimizer (obj): optimizer
@@ -705,7 +704,6 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
     best_train_loss     = np.inf
     lr_decreases        = 0
     best_acc            = 0
-    epoch_loss          = np.inf
 
     torch.save(model.state_dict(), os.path.join(log_dir, "checkpoint" + ".pt"))
     os.chmod(log_dir,0o777)

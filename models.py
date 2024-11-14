@@ -4,7 +4,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as func
 
 class AlexNet3D(nn.Module):
     def __init__(self, num_channels=2,num_classes=4):
@@ -31,7 +31,7 @@ class AlexNet3D(nn.Module):
         )
         
         self.avgpool = nn.AdaptiveAvgPool3d((6, 6, 6))
-        
+
         self.classifier = nn.Sequential(
             nn.Dropout(),
             nn.Linear(256 * 6 * 6 * 6, 4096),
@@ -159,7 +159,7 @@ class GoogleNet3D(nn.Module):
         # self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
-        x = F.relu(self.conv1_v2(x))
+        x = func.relu(self.conv1_v2(x))
         x = self.max_pool1(x)
 
         x = self.inception1(x)
