@@ -7,10 +7,8 @@ import os
 import pickle
 import resource
 
-import torch
 import monai
-import torch.nn as nn
-from monai.networks.nets import DenseNet264
+import torch
 from IPython.display import clear_output
 from monai.utils import set_determinism
 

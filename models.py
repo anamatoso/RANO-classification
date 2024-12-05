@@ -4,8 +4,12 @@
 
 import torch
 import torch.nn as nn
+from functools import partial
 import torch.nn.functional as func
+from torch.autograd import Variable
 
+
+# 3D version of AlexNet
 class AlexNet3D(nn.Module):
     def __init__(self, num_channels=2,num_classes=4):
         super(AlexNet3D, self).__init__()

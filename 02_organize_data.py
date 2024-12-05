@@ -1,7 +1,6 @@
 #%% Imports
 
 import os
-import pickle
 import subprocess as sub
 
 import pandas as pd

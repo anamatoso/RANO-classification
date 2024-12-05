@@ -8,37 +8,31 @@ import sys
 import time
 from datetime import datetime
 
-import imageio
+import ants
+import imageio.v2 as imageio
+import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
-import matplotlib.pyplot as plt
-
-import ants
+import pandas as pd
 from IPython.display import display
 from ipywidgets import HBox, IntSlider, Layout, interactive
-from nipype.interfaces.image import Reorient
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
-                             precision_score, recall_score)
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as func
-from torch.utils.data import WeightedRandomSampler
-from torch.utils.tensorboard import SummaryWriter
-
 from monai.data import DataLoader, Dataset
 from monai.data.meta_tensor import MetaTensor
 from monai.metrics import ROCAUCMetric, compute_roc_auc
-from monai.networks.nets import (Classifier, DenseNet121, DenseNet169,
-                                 DenseNet264, ResNet, ViT)
+from monai.networks.nets import (DenseNet121, DenseNet169,
+                                 DenseNet264, ViT)
 from monai.transforms import (Compose, ConcatItemsd, DeleteItemsd, LoadImaged,
                               NormalizeIntensityd, RandAdjustContrastd,
                               RandFlipd, RandGaussianNoised,
                               RandScaleIntensityd, SubtractItemsd)
 from monai.utils import first, set_determinism
+from nipype.interfaces.image import Reorient
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                             precision_score, recall_score)
+from torch.utils.data import WeightedRandomSampler
+from torch.utils.tensorboard import SummaryWriter
 
-from models import (AlexNet3D, DenseNetWithClinical)
-
+from models import *
 
 
 def plot_slices(images):

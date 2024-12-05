@@ -7,24 +7,21 @@ import resource
 import sys
 
 import matplotlib.pyplot as plt
+import monai
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as func
-
 from captum.attr import Saliency
+from monai.data import DataLoader, Dataset
+from monai.networks.nets import (DenseNet121, DenseNet169,
+                                 DenseNet264, ViT)
+from monai.utils import set_determinism
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-import monai
-from monai.data import DataLoader, Dataset
-from monai.networks.nets import (Classifier, DenseNet121, DenseNet169,
-                                 DenseNet264, ResNet, ViT)
-from monai.utils import set_determinism
-
-from aux import get_data_and_transforms, plot_saliency_grid
 from models import (AlexNet3D, DenseNetWithClinical)
-
+from utils import get_data_and_transforms, plot_saliency_grid
 
 cuda=torch.cuda.is_available()
 
