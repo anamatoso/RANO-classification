@@ -611,6 +611,76 @@ def init_weights(model):
             torch.nn.init.constant_(module.weight, 1)
             torch.nn.init.constant_(module.bias, 0)
 
+def pretrain(model, pretrain_option, device, logs_folder, main_dir, num_channels):
+    if pretrain_option == 0:
+        return model
+    elif pretrain_option == 1:  # MEDMNIST and copying weights of first layer throughout the channels
+        # Get pretrained model
+        pretrained_model = DenseNet264(spatial_dims=3, in_channels=1, out_channels=11, pretrained=False)
+        pretrained_model.load_state_dict(torch.load(os.path.join(logs_folder, "medmnist", "medmnist.pt"), map_location=device))
+        pretrained_dict = pretrained_model.state_dict()
+
+        # Copy the layers that we are able to copy
+        model_dict = model.state_dict()
+        compatible_weights = {k: v for k, v in pretrained_dict.items() if
+                              k in model_dict and v.size() == model_dict[k].size()}
+        model_dict.update(compatible_weights)
+        model.load_state_dict(model_dict)
+
+        # Create new input convolutional layer with size equal to what we need and copy weights channel wise
+        pretrained_conv1_weights = pretrained_model.features.conv0.weight
+        new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0],
+                              kernel_size=pretrained_model.features.conv0.kernel_size,
+                              stride=pretrained_model.features.conv0.stride,
+                              padding=pretrained_model.features.conv0.padding,
+                              bias=(pretrained_model.features.conv0.bias is not None))
+        new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+        new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+
+        # Replace first layer of our model with this one
+        model.features.conv0 = new_conv1.to(device)
+
+    elif pretrain_option == 2:  # medicalnet
+        model.load_state_dict(
+            torch.load(os.path.join(main_dir, "medicalnet", "resnet_18_23dataset.pth"), map_location=device), strict=False)
+
+        # Create new input convolutional layer with size equal to what we need and copy weights channel wise
+        pretrained_conv1_weights = model.conv1.weight
+        new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0],
+                              kernel_size=model.conv1.kernel_size[0], stride=model.conv1.stride[0],
+                              padding=model.conv1.padding[0], bias=(model.conv1.bias is not None))
+        new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+        new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+
+        # Replace first layer of our model with this one
+        model.conv1 = new_conv1
+
+    elif pretrain_option == 3:  # Pretraining with self-supervised model (classifying rotations)
+        # Get pretrained model
+        pretrained_model = DenseNet264(spatial_dims=3, in_channels=1, out_channels=6, pretrained=False)
+        pretrained_model.load_state_dict(torch.load(os.path.join(logs_folder, "rotations", "rotations.pt"), map_location=device))
+        pretrained_dict = pretrained_model.state_dict()
+
+        # Copy the layers that we are able to copy
+        model_dict = model.state_dict()
+        compatible_weights = {k: v for k, v in pretrained_dict.items() if
+                              k in model_dict and v.size() == model_dict[k].size()}
+        model_dict.update(compatible_weights)
+        model.load_state_dict(model_dict)
+
+        # Create new convolutional layer with size equal to what we need and copy weights channel wise
+        pretrained_conv1_weights = pretrained_model.features.conv0.weight
+        new_conv1 = nn.Conv3d(num_channels, pretrained_conv1_weights.shape[0],
+                              kernel_size=pretrained_model.features.conv0.kernel_size,
+                              stride=pretrained_model.features.conv0.stride,
+                              padding=pretrained_model.features.conv0.padding,
+                              bias=(pretrained_model.features.conv0.bias is not None))
+        new_conv1.weight.data[:, :1] = pretrained_conv1_weights  # Copy the pretrained weights
+        new_conv1.weight.data[:, 1:] = pretrained_conv1_weights  # Replicate across remaining channels
+
+        # Replace first layer of our model with this one
+        model.features.conv0 = new_conv1
+    return model
 
 
 def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
