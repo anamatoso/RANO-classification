@@ -21,8 +21,8 @@ torch.cuda.empty_cache()
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
 
-#%%
-# Set arguments of try
+# Set arguments of experiment
+
 def validate_mods_keep(mods):
     """Function used to validate if the list of mods is usable to get the dataset that we want
 
@@ -47,8 +47,9 @@ def parse_args():
     """Argument parser
 
     Returns:
-        _type_: _description_
+        parser: returns elements in a struct
     """
+
     parser = argparse.ArgumentParser(description='Process some integers.')
 
     # Adding arguments
@@ -74,8 +75,6 @@ def parse_args():
                         help = 'an integer for patience, defaults to 10')
     parser.add_argument('--decrease_LR', action = 'store_true',
                         help = 'a boolean flag for subtract, defaults to True')
-    parser.add_argument('--stop_decrease', action = 'store_true',
-                        help = 'a boolean flag for stop_decrease, defaults to True')
     parser.add_argument('--dec_LR_factor', type = int, default = 10,
                         help = 'an integer for dec_LR_factor, defaults to 10')
     parser.add_argument('--loss_weight', type = str, default = "1/prev",
@@ -90,7 +89,6 @@ def parse_args():
                         help = 'whether to use clinical data')
     args = parser.parse_args()
     return args
-# %%
 
 if __name__ == '__main__':
     arguments = parse_args()
@@ -98,15 +96,16 @@ if __name__ == '__main__':
 
     MAIN_DIR        = os.getcwd()
     DATASET        = "rano_"+"_".join(arguments.mods_keep)+"_T-1"
-    print(DATASET)
+    MAIN_DIR       = os.getcwd()
+    DATASET        = "rano_" + "_".join(arguments.mods_keep) + "_T-1"
     CLASSES        = ["PD", "SD", "PR", "CR"]
     NUM_CLASSES    = len(CLASSES)
     LOGS_FOLDER    = "./Pytorch_Logs"
-    DATA_DIR       = "./LUMIERE/Imaging"
+    DATA_DIR       = os.path.join("./LUMIERE/Imaging", DATASET)
     MODEL_NAME     = arguments.model_name
     BS             = arguments.batch_size
     N_EPOCHS       = arguments.n_epochs
-    LEARNING_RATE = arguments.learning_rate
+    LEARNING_RATE  = arguments.learning_rate
     WEIGHT_DECAY   = arguments.weight_decay
     PATIENCE       = arguments.patience
     LOSS_WEIGHT    = arguments.loss_weight
@@ -114,7 +113,6 @@ if __name__ == '__main__':
     SAMPLER_WEIGHT = arguments.sampler_weight
     CONVERT_BIN    = arguments.binary_classes
     DECREASE_LR    = arguments.decrease_LR
-    STOP_DECREASE  = arguments.stop_decrease
     DEC_LR_FACTOR  = arguments.dec_LR_factor
     LOSS           = arguments.loss
     PRETRAINING    = arguments.pretraining
@@ -128,7 +126,7 @@ if __name__ == '__main__':
     with open(os.path.join(MAIN_DIR, "table_classifiable.pkl"), "rb") as f:
         TABLE_CLASSIFIABLE = pickle.load(f)
 
-    # Create the data, get transforms and number of channels
+    # Create the data, get the transforms, the number of channels and the labels
     data,  transforms_train, transforms_test, \
         num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFIABLE, CLASSES, SUBTRACT)
 
@@ -141,6 +139,7 @@ if __name__ == '__main__':
                                                        num_partitions = arguments.n_folds,
                                                        seed = SEED)
 
+    # Create folds
     for fold in range(arguments.n_folds):
         print("Creating loaders...")
         class_prevalence, train_loader, test_loader = get_loaders(CLASSES, BS,
@@ -157,6 +156,7 @@ if __name__ == '__main__':
                                                                                 LOSS_WEIGHT,
                                                                                 num_channels,
                                                                                 NUM_CLASSES)
+        # Add weights to model
         model.apply(init_weights)
         if PRETRAINING !=0:
             if PRETRAINING==3:# MEDMNIST but copying weights of first layer throughout the channels
@@ -215,14 +215,13 @@ if __name__ == '__main__':
 
         clear_output()
 
-        print("Learning with model "+ MODEL_NAME)
+        # Create logs
         LOG_DIR, writer = create_tensorboard(N_EPOCHS, BS, LEARNING_RATE, LOGS_FOLDER,
                                              DEVICE, MODEL_NAME, DATASET, SUBTRACT,
                                              WEIGHT_DECAY, WEIGHT, LOSS_FUNCTION,
-                                             STOP_DECREASE, DECREASE_LR, SAMPLER_WEIGHT,
-                                             DEC_LR_FACTOR,fold)
+                                             DECREASE_LR, SAMPLER_WEIGHT, DEC_LR_FACTOR,fold)
 
-
+        print("Learning with model " + MODEL_NAME)
         train(LOG_DIR, writer, train_loader, test_loader, MODEL_NAME,
               DATASET, DEVICE, arguments.learning_rate, N_EPOCHS, OPTIMIZER,
               SEED, WEIGHT_DECAY, LOSS_FUNCTION, model, DECREASE_LR,
@@ -233,20 +232,23 @@ if __name__ == '__main__':
         print("Testing model with unseen data...")
         result, _, _ = test(MODEL_CONFIG, LOG_DIR, DATASET, DEVICE, BS,
                             CLASSES, test_loader, MODEL_NAME, CLINICAL_DATA)
-        result["Binary"] = CONVERT_BIN
-        result["Modalities"] = DATASET
-        result["Fold"] = fold
-        result["Subtract"] = SUBTRACT
-        result["n_epochs"] = N_EPOCHS
-        result["learning_rate"] = LEARNING_RATE
-        result["batch_size"] = BS
-        result["model"] = MODEL_NAME
-        result["loss_weight"] = LOSS_WEIGHT
-        result["sampler_weight"] = SAMPLER_WEIGHT
-        result["loss"]=arguments.loss
-        result["pretraining"]=arguments.pretraining
-        result["clinical_data"]=arguments.clinical_data
 
+        # Add to the created dictionary the parameters of the experiment
+        result["Binary"]         = CONVERT_BIN
+        result["Modalities"]     = DATASET
+        result["Fold"]           = fold
+        result["Subtract"]       = SUBTRACT
+        result["n_epochs"]       = N_EPOCHS
+        result["learning_rate"]  = LEARNING_RATE
+        result["batch_size"]     = BS
+        result["model"]          = MODEL_NAME
+        result["loss_weight"]    = LOSS_WEIGHT
+        result["sampler_weight"] = SAMPLER_WEIGHT
+        result["loss"]           = arguments.loss
+        result["pretraining"]    = arguments.pretraining
+        result["clinical_data"]  = arguments.clinical_data
+
+        # Save results to csv
         print(result)
         with open('results.csv', 'a', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)

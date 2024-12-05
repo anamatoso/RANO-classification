@@ -80,7 +80,7 @@ def plot_slices(images):
             axes[j].imshow(slice_image.T, cmap=cmaps[i], origin="lower",alpha=alphas[i])
             if j == 0:
                 axes[j].set(ylabel="1/3")
-                axes[j].set(title="Sagital")
+                axes[j].set(title="Sagittal")
             elif j == 1:
                 axes[j].set(title="Coronal")
             elif j == 2:
@@ -101,7 +101,7 @@ def force_delete_file(file):
         os.remove(file)
 
 def get_resolution(filename):
-    """Get the resolution of an mri image from its path
+    """Get the resolution of a mri image from its path
 
     Args:
         filename (str): path of the image
@@ -129,17 +129,17 @@ def calculate_isotropy(resolution):
                  resolution[2] / resolution[1]]
     return np.mean(ratio_xyz)
 
-def change_datatype(filename, newtype = "uint16"):
+def change_datatype(filename, new_type = "uint16"):
     """This function alters the datatype of an image to the specified one
 
     Args:
         filename (str): path of the image
-        newtype (str, optional): data type to change the image to. Defaults to "uint16".
+        new_type (str, optional): data type to change the image to. Defaults to "uint16".
     """
     image = nib.load(filename)
     data = image.get_fdata()
-    newimage = nib.Nifti1Image(data.astype(newtype), image.affine)
-    nib.save(newimage,filename)
+    new_image = nib.Nifti1Image(data.astype(new_type), image.affine)
+    nib.save(new_image,filename)
 
 def extract_firstvolume(filename, out_filename=None):
     """extract_firstvolume extracts the first volume of an image
@@ -176,9 +176,10 @@ def register(static, moving, output_image, transform_type="rigid", out_affine=No
         static (string): Filename of the image in the space we want to register to.
         moving (string): Filename of the image to be moved to the static image space.
         output_image (string): Filename of the transformed/registered image.
+        transform_type (string): Type of transform to apply. Options: com, trans, rigid_isoscaling, rigid_scaling, rigid, and affine
         out_affine (string, optional): Filename of the affine transformation matrix
         to be created. Defaults to None in which no file is created
-        (in fact it is but is is deleted).
+        (in fact it is, but it is deleted).
     """
 
     if out_affine is None:
@@ -207,7 +208,7 @@ def apply_transform(static, moving, matrix, output_image):
     change_datatype(output_image)
 
 def preprocess(image, output, use_fsl=False):
-    """This function preprocessess the image by reorienting it to RAS, 
+    """This function preprocesses the image by reorienting it to RAS,
     then if the user wants to, uses robustFOV to crop the fov. 
     Then, bias field correction and gaussian denoising is applied
 
@@ -230,17 +231,17 @@ def preprocess(image, output, use_fsl=False):
 
         # Create mask to prevent intensity normalization in every
         # iteration of the bias field correction
-        mask = ants.threshold_image(reoriented_ants,low_thresh=1e-5,
-                                    high_thresh=np.inf,inval=1,outval=0,binary=True)
+        mask = ants.threshold_image(reoriented_ants, low_thresh=1e-5,
+                                       high_thresh=np.inf, inval=1, outval=0, binary=True)
 
-        image_biascorrected = ants.n4_bias_field_correction(reoriented_ants,mask,False)
+        image_biascorrected = ants.n4_bias_field_correction(reoriented_ants, mask, False)
         #ants.image_write(image_biascorrected, "image_biascorrected.nii.gz")
 
         # Remove Gaussian Noise
-        imagedenoise = ants.denoise_image(image_biascorrected, mask, noise_model = "Gaussian")
+        image_denoised = ants.denoise_image(image_biascorrected, mask, noise_model ="Gaussian")
 
         # Write image to file
-        ants.image_write(imagedenoise, output)
+        ants.image_write(image_denoised, output)
 
         # Save as uint16
         change_datatype(output)
@@ -258,11 +259,11 @@ def preprocess(image, output, use_fsl=False):
         sub.run(["DenoiseImage", "-d", "3", "-i", "temp_reoriented_fov_bias.nii.gz", "-n",
                  "Gaussian", "-o", "temp_reoriented_fov_bias_denoise.nii.gz"], check=False)
         resampled = ants.resample_image(ants.image_read("temp_reoriented_fov_bias_denoise.nii.gz"),
-                                        [240,240,155],True,0)
+                                           [240,240,155], True, 0)
         ants.image_write(resampled, output)
 
     # Remove temporary files
-    for file in ["CT1_ras.nii.gz", "CT1.mat","T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz",
+    for file in ["CT1.mat","T1.mat", "T2.mat", "FLAIR.mat", "temp_reoriented_fov.nii.gz",
                  "temp_reoriented.nii.gz", "temp_reoriented_fov_bias.nii.gz", 
                  "temp_reoriented_fov_bias_denoise.nii.gz"]:
         force_delete_file(os.path.join(os.getcwd(),file))
@@ -277,10 +278,9 @@ def create_count_column(table_all, images, name_column):
     """
 
     def have_image(row, list_images):
-        """This function returns true if the row in the table has the images in the list, following the AND or OR logic
+        """This function returns true if the row in the table has the images in the list
     Args:
         row (series): Row of the dataframe
-        logic (str, optional): Logic to determine if the row has the images. Defaults to "or".
         list_images (list): list of images
     Returns:
         bool: True if the patient has the images with the logic and false otherwise
@@ -401,19 +401,18 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
 
     Args:
         data_dir (string): path to the dataset directory
-        table_all (dataframe): dataframe with all the RANO info needed regarding with data to use
+        data_all (dataframe): dataframe with all the RANO info needed regarding with data to use
         classes (list): list of classes
-        subtract (bool): whether to perform subtration between the two timepoints
+        subtract (bool): whether to subtract each image from the past timepoint one
+        clinical_data (bool): whether to use clinical data of the patient
 
     Returns:
-        list: list with a dictionary for classifiable timepoint, 
-        the transforms to be applied to the images, the number of channels 
-        to be used by the models and the list of labels of each datapoint
+        list: list with a dictionary for classifiable timepoint, the transforms to be applied to the images, the number of channels to be used by the models and the list of labels of each datapoint
 
     """
     n_classes = len(classes)
     data = []
-    labels= []
+    labels = []
     for timepoint in sorted(os.listdir(data_dir)):
         timepoint_dir = os.path.join(data_dir, timepoint)    # Get full directory
         patient, week = timepoint.split('_')                # Get patient and timepoint
@@ -449,7 +448,7 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
         data.append(timepoint_dict)
 
     # Create transforms to apply to the images
-    image_key_list=[key for key in data[0].keys() if key.startswith('image')]
+    image_key_list = [key for key in data[0].keys() if key.startswith('image')]
 
     # Calculate how many channels will be needed according to the dataset in use
     dataset = os.path.basename(data_dir)
@@ -457,53 +456,56 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
 
     # Define if we want to subtract the images in each modality
     if subtract:
-        to_subtract= [["image0_"+mod,"image-1_"+mod] for mod in available_mods]
-        to_subtract_names= available_mods
+        to_subtract = [["image0_" + mod, "image-1_" + mod] for mod in available_mods]
+        to_subtract_names = available_mods
         transforms_train = Compose([
-            LoadImaged(keys = image_key_list, ensure_channel_first = True),
-            NormalizeIntensityd(keys = image_key_list, channel_wise = True), # Zscore
-            ]+[SubtractItemsd(keys = to_subtract[i], name = to_subtract_names[i])
-               for i in range(len(to_subtract))]+[
-            RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=0),
-            RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=1),
-            RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=2),
-            RandScaleIntensityd(keys=to_subtract_names, prob=0.9, factors=0.1, channel_wise=True),
-            RandAdjustContrastd(keys=to_subtract_names, prob=0.9),
-            RandGaussianNoised(keys=to_subtract_names,prob=0.9),
-            ConcatItemsd(keys = to_subtract_names, name = "images"),
-            DeleteItemsd(keys = image_key_list+to_subtract_names)])
-
+                                       LoadImaged(keys=image_key_list, ensure_channel_first=True),
+                                       NormalizeIntensityd(keys=image_key_list, channel_wise=True),  # Zscore
+                                   ] + [SubtractItemsd(keys=to_subtract[i], name=to_subtract_names[i]) for i in
+                                        range(len(to_subtract))] + [
+                                       RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=0),
+                                       RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=1),
+                                       RandFlipd(keys=to_subtract_names, prob=0.5, spatial_axis=2),
+                                       RandScaleIntensityd(keys=to_subtract_names, prob=0.9, factors=0.1,
+                                                           channel_wise=True),
+                                       RandAdjustContrastd(keys=to_subtract_names, prob=0.9),
+                                       RandGaussianNoised(keys=to_subtract_names, prob=0.9),
+                                       ConcatItemsd(keys=to_subtract_names, name="images"),
+                                       DeleteItemsd(keys=image_key_list + to_subtract_names)
+                                   ])
         transforms_test = Compose([
-            LoadImaged(keys = image_key_list, ensure_channel_first = True),
-            NormalizeIntensityd(keys = image_key_list, channel_wise = True),
-            ]+[SubtractItemsd(keys = to_subtract[i], name = to_subtract_names[i])
-               for i in range(len(to_subtract))]+
-            [ConcatItemsd(keys = to_subtract_names, name = "images"),
-             DeleteItemsd(keys = image_key_list+to_subtract_names)])
+                                      LoadImaged(keys=image_key_list, ensure_channel_first=True),
+                                      NormalizeIntensityd(keys=image_key_list, channel_wise=True),
+                                  ] + [SubtractItemsd(keys=to_subtract[i], name=to_subtract_names[i]) for i in
+                                       range(len(to_subtract))] +
+                                  [ConcatItemsd(keys=to_subtract_names, name="images"),
+                                   DeleteItemsd(keys=image_key_list + to_subtract_names)
+
+                                   ])
         num_channels = n_modalities
+
     else:
         transforms_train = Compose([
-            LoadImaged(keys = image_key_list, ensure_channel_first = True),
-            NormalizeIntensityd(keys = image_key_list, channel_wise = True),
+            LoadImaged(keys=image_key_list, ensure_channel_first=True),
+            NormalizeIntensityd(keys=image_key_list, channel_wise=True),
             RandFlipd(keys=image_key_list, prob=0.5, spatial_axis=0),
             RandFlipd(keys=image_key_list, prob=0.5, spatial_axis=1),
             RandFlipd(keys=image_key_list, prob=0.5, spatial_axis=2),
             RandScaleIntensityd(keys=image_key_list, prob=0.9, factors=0.1, channel_wise=True),
             RandAdjustContrastd(keys=image_key_list, prob=0.9),
             RandGaussianNoised(keys=image_key_list, prob=0.9),
-            ConcatItemsd(keys = image_key_list, name = "images"),
-            DeleteItemsd(keys = image_key_list)
+            ConcatItemsd(keys=image_key_list, name="images"),
+            DeleteItemsd(keys=image_key_list)
         ])
         transforms_test = Compose([
-            LoadImaged(keys = image_key_list, ensure_channel_first = True),
-            NormalizeIntensityd(keys = image_key_list, channel_wise = True),
-            ConcatItemsd(keys = image_key_list, name = "images"),
-            DeleteItemsd(keys = image_key_list)
+            LoadImaged(keys=image_key_list, ensure_channel_first=True),
+            NormalizeIntensityd(keys=image_key_list, channel_wise=True),
+            ConcatItemsd(keys=image_key_list, name="images"),
+            DeleteItemsd(keys=image_key_list)
         ])
         num_channels = 2 * n_modalities
 
     return data, transforms_train, transforms_test, num_channels, labels
-
 
 def get_loaders(classes, bs, sampler_weight, transforms_train, transforms_test, i, folds):
     train_data_unflattened = folds[0:i]+folds[i+1:]
@@ -555,9 +557,7 @@ def get_loaders(classes, bs, sampler_weight, transforms_train, transforms_test, 
 
 
 def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_decay, loss_weight, num_channels, num_classes):
-    if model_name == "monai_classifier":
-        model_config  = Classifier(in_shape = (num_channels, 240, 240, 155), classes = num_classes, channels = (2, 4, 8), strides = (2, 4, 8), last_act = "softmax")
-    elif model_name == "monai_densenet121":
+    if model_name == "monai_densenet121":
         model_config  = DenseNet121(spatial_dims = 3, in_channels = num_channels, out_channels = num_classes, pretrained = False)
     elif model_name == "monai_densenet169":
         model_config  = DenseNet169(spatial_dims = 3, in_channels = num_channels, out_channels = num_classes, pretrained = False)
@@ -565,13 +565,10 @@ def get_model_setup(model_name, class_prevalence, device, learning_rate, weight_
         model_config  = DenseNet264(spatial_dims = 3, in_channels = num_channels, out_channels = num_classes, pretrained = False)
     elif model_name == "monai_vit":
         model_config  = ViT(in_channels = num_channels, img_size = [240, 240, 155], patch_size = [20, 20, 10], classification = True, num_classes = num_classes, pos_embed_type = 'sincos', dropout_rate = 0.1)
-    elif model_name == "monai_resnet":
-        model_config  = ResNet("bottleneck", [3, 4, 6, 3], [64, 128, 256, 512], spatial_dims = 3, n_input_channels = num_channels, num_classes = num_classes)
     elif model_name == "AlexNet3D":
         model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
     elif model_name == "medicalnet_resnet18":
-        from modelresnet import resnet18
-        model_config  = resnet18(sample_input_W=240, sample_input_H=240, sample_input_D=155, shortcut_type='A', no_cuda=False, num_seg_classes=4)  
+        model_config  = resnet18(sample_input_W=240, sample_input_H=240, sample_input_D=155, shortcut_type='A', no_cuda=False, num_seg_classes=4)
     elif model_name == "densenet264clinical":
         image_model  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
         model_config = DenseNetWithClinical(densenet_model=image_model, num_classes=num_classes, clinical_data_dim=5)
@@ -634,10 +631,10 @@ def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
         weight_decay (float): weight decay for adamW
         weight (tensor): weight of loss function (one value per class)
         loss_function (obj): Loss function to use
-        stop_decrease (bool): Whether to stop the learning process
         decrease_LR (bool): Whether to decrease the learning rate
         sampler_weight (str): How to perform the sampler weight (1-prevalence or 1/prevalence)
         dec_LR_factor (int): Factor by which to decrease the learning rate
+        fold (int): Number of fold
 
     Returns:
         list: log dir of particular training session, and the writer
@@ -656,7 +653,6 @@ def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
     writer.add_text("weight_decay", "weight_decay: " + str(weight_decay))
     writer.add_text("loss function weight", "weight: " + str(weight))
     writer.add_text("loss_function", "loss_function: " + str(loss_function))
-    writer.add_text("stop_decrease", "stop_decrease: " + str(stop_decrease))
     writer.add_text("decrease_LR", "decrease_LR: " + str(decrease_LR))
     writer.add_text("sampler_weight", "sampler_weight: " + sampler_weight)
     writer.add_text("dec_LR_factor", "decrease LR factor: " + str(dec_LR_factor))
@@ -676,18 +672,19 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
         train_loader (dataloader): dataloader of training data
         test_loader (dataloader): dataloader of test data
         model_name (str): name of the model to use
+        dataset (str): Name of dataset
         device (device): name of device
         learning_rate (float): learning rate for the optimizer
         n_epochs (int): number of (maximum) epochs
         optimizer (obj): optimizer
         seed (int): seed number
         weight_decay (float): weight decay for adamW
-        val_interval (int): interval of epochs to perform validation
         loss_function (obj): Loss function to use
         model (obj): model object
-        stop_decrease (bool): Whether to stop the learning process
         decrease_LR (bool): Whether to decrease the learning rate
-        patience (int): _description_
+        dec_LR_factor (int): Factor by which to diminish the learning rate
+        patience (int): Number of epochs of patience
+        clinical_data (bool): Whether to use clinical data
     """
     torch.cuda.empty_cache()
     best_metric         = -1
@@ -818,7 +815,7 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
 def critical_error(y_pred, y):
     """This function calculated the probability of making  crucial error. 
     A crucial error is either when the function predicts disease development (0 or 1) 
-    but is is actually response (2 or 3), or when it predicts response development but 
+    but it is actually response (2 or 3), or when it predicts response development, but
     it is actually disease development
 
     Args:
@@ -858,20 +855,20 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     """Function to test model
 
     Args:
-        model_config (_type_): _description_
-        log_dir (_type_): _description_
-        dataset (_type_): _description_
-        device (_type_): _description_
-        bs (_type_): _description_
-        classes (_type_): _description_
-        test_loader (_type_): _description_
-        model_name (_type_): _description_
+        model_config (model): _description_
+        log_dir (str): Directory of the logs
+        dataset (str): Name of the dataset
+        device (device): _description_
+        bs (int): batch size
+        classes (list): list of classes for the classification
+        test_loader (Dataloader): Test loader
+        model_name (str): Name of the model to use
 
     Returns:
-        _type_: _description_
+        list: returns a dictionary with the results metrics and the list of real and predicted classes
     """
     model_trained = model_config
-    print("Loading weights from: "+os.path.join(log_dir, dataset + ".pt"))
+    print("Loading weights from: " + os.path.join(log_dir, dataset + ".pt"))
     model_trained.load_state_dict(torch.load(os.path.join(log_dir, dataset + ".pt"), map_location = device))
 
     model_trained.eval()
@@ -915,7 +912,7 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     F1_score = 2 * (precision * recall) / (precision + recall)
     critical_err = critical_error(predicted, real)
 
-    print("Balenced Accuracy    :", bal_accuracy)
+    print("Balanced Accuracy    :", bal_accuracy)
     print("Accuracy             :", accuracy)
     print("F1-score             :", F1_score)
     print("Precision            :", precision)
@@ -929,7 +926,7 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     # Create results variable and save it in a pickle format
     result = {
     "logdir"                : os.path.basename(log_dir),
-    "Balenced Accuracy"     : str(bal_accuracy),
+    "Balanced Accuracy"     : str(bal_accuracy),
     "Accuracy"              : str(accuracy),
     "F1-score"              : str(F1_score),
     "Precision"             : str(precision),
@@ -945,7 +942,7 @@ def plot_image(image, norm = None):
     """This function plots the axial slice of an image along with a z slider so that the z coordinate can be changed dynamically
 
     Args:
-        image (string): file path of the image to plot
+        image (string|MetaTensor): file path of the image to plot
         norm (None or string): see norm parameter of plt.imshow
     """
 
@@ -984,8 +981,10 @@ def plot_saliency(image_data, saliency, overlay=False, cmap="gray"):
     """This function plots the saliency map along with the input image (data) of a certain prediction.
 
     Args:
-        image (numpy array): image data to be plotted
+        image_data (numpy array): image data to be plotted
         saliency (numpy array): saliency map to be plotted
+        overlay (bool): whether to overlay images
+        cmap (str): colormap to use
     """
 
     # Function to display axial slice
@@ -1044,7 +1043,10 @@ def plot_saliency_grid(image_data, saliency, overlay=False, cmap='gray', num_row
         image_data (numpy array): image data to be plotted
         saliency (numpy array): saliency map to be plotted
         overlay (bool): whether to overlay saliency on image
-        num_slices (int): number of slices to show (default 15 for 3x5 grid)
+        cmap (str): colormap to use
+        num_rows (int): number of rows
+        num_columns (int): number of columns
+        filename (str): Name of file to be saved. If None file is not saved
     """
     num_slices=num_rows*num_columns
 

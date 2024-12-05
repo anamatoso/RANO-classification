@@ -85,9 +85,7 @@ device = "cpu"
 #################
 # Model Options #
 #################
-if model_name == "monai_classifier":
-    model_config  = Classifier(in_shape=(num_channels,240,240,155), classes=num_classes, channels=(2,4,8), strides=(2,4,8),last_act="softmax")
-elif model_name == "monai_densenet121":
+if model_name == "monai_densenet121":
     model_config  = DenseNet121(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
 elif model_name == "monai_densenet169":
     model_config  = DenseNet169(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
@@ -95,12 +93,10 @@ elif model_name == "monai_densenet264":
     model_config  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
 elif model_name == "monai_vit":
     model_config  = ViT(in_channels=num_channels, img_size=[240,240,155], patch_size=[20,20,10], classification=True, num_classes=num_classes, pos_embed_type='sincos', dropout_rate=0.1)
-elif model_name == "monai_resnet":
-    model_config  = ResNet("Bottleneck", [3, 4, 6, 3], [64, 128, 256, 512], spatial_dims=3, n_input_channels=num_channels, num_classes=num_classes)
 elif model_name == "AlexNet3D":
     model_config  = AlexNet3D(num_channels, num_classes = num_classes)  
 elif model_name == "medicalnet_resnet18":
-    from modelresnet import resnet18
+    from models import resnet18
     model_config  = resnet18(sample_input_W=240, sample_input_H=240, sample_input_D=155, shortcut_type='A', no_cuda=False, num_seg_classes=4)  
 elif model_name == "densenet264clinical":
     image_model  = DenseNet264(spatial_dims=3, in_channels=num_channels, out_channels=num_classes, pretrained=False)
@@ -141,8 +137,8 @@ target_layers = [model.features[10]]
 torch.cuda.empty_cache()
 # Construct the CAM object
 with GradCAM(model=model, target_layers=target_layers) as cam:
-    grayscale_cam_real = cam(input_tensor=input_tensor, targets=target_real)
-    grayscale_cam_pred = cam(input_tensor=input_tensor, targets=target_pred)
+    grayscale_cam_real = cam(input_tensor=input_tensor, targets = target_real)
+    grayscale_cam_pred = cam(input_tensor=input_tensor, targets = target_pred)
 
 grayscale_cam_real = grayscale_cam_real[0, :]
 grayscale_cam_pred = grayscale_cam_pred[0, :]
