@@ -395,9 +395,36 @@ def convert2binary(data, labels, dataset):
     return data, labels, classes, num_classes, new_dataset
 
 
-def get_data_and_transforms(data_dir, table_all, classes, subtract):
-    """This function creates the list of timepoints in which 
-    each timepoint has the images necessary and the labels
+def get_clinical_data(patient, data_dir):
+    # Get clinical data output file (in case we need to create it)
+    summary_file = os.path.join(os.path.dirname(os.path.dirname(data_dir)), "clinical_data.csv")
+
+    # create csv with clinical info needed in the correct format
+    if not os.path.exists(summary_file):
+        file = os.path.join(os.path.dirname(os.path.dirname(data_dir)), "csvs", "LUMIERE-Demographics_Pathology.csv")
+        df = pd.read_csv(file)
+        df_filtered = df.filter(
+            items=["Patient", "Sex", "Age at surgery (years)", "IDH (WT: wild type)", "MGMT qualitative"])
+        df_filtered['Sex'] = df_filtered['Sex'].replace({'male': -1, 'female': 1})
+        df_filtered = df_filtered.rename(columns={'Age at surgery (years)': 'Age'})
+        df_filtered = df_filtered.rename(columns={'IDH (WT: wild type)': 'IDH'})
+        df_filtered['IDH'] = df_filtered['IDH'].replace(
+            {'WT': 1, 'na': 0, 'IDH1 neg, Sequencing required': -1, 'R132H mut': -1})
+        df_filtered = df_filtered.rename(columns={'MGMT qualitative': 'MGMT'})
+        df_filtered['MGMT'] = df_filtered['MGMT'].replace({'methylated': 1, 'na': 0, 'not methylated': -1})
+        df_filtered.to_csv(summary_file, index=False)
+
+    # Read file with clinical info and return row that corresponds to patient
+    df = pd.read_csv(summary_file,
+                     dtype={"Patient": 'string', "Age": 'int64', "IDH": 'int64', "MGMT": 'int64', "Sex": 'int64'})
+    if patient in df['Patient'].values:
+        return df[df['Patient'] == patient].iloc[0].tolist()[1:]
+    else:
+        raise Exception("The patient number is not valid because it is not in the csv.")
+
+
+def get_data_and_transforms(data_dir, data_all, classes, subtract, clinical_data):
+    """This function creates the list of timepoints in which each timepoint has the images necessary and the labels
 
     Args:
         data_dir (string): path to the dataset directory
@@ -414,35 +441,37 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
     data = []
     labels = []
     for timepoint in sorted(os.listdir(data_dir)):
-        timepoint_dir = os.path.join(data_dir, timepoint)    # Get full directory
-        patient, week = timepoint.split('_')                # Get patient and timepoint
+        timepoint_dir = os.path.join(data_dir, timepoint)  # Get full directory
+        patient, week = timepoint.split('_')  # Get patient and timepoint
+        time_elapsed = int(week[5:8])
 
-        # Get RANO value and turn it into logit
-        result = table_all[(table_all['Patient'] == patient) & (table_all['Timepoint'] == week)]
-        if patient == "Patient-043" and week == "week-106":
-            continue
-        else:
-            rano = result['RANO'].values[0]
+        # Get RANO value
+        result = data_all[(data_all['Patient'] == patient) & (data_all['Timepoint'] == week)]
+        rano = result['RANO'].values[0] if len(result['RANO'].values) != 0 else result['RANO'].values
+
         if rano not in classes:
-            print(timepoint) # For sanity check
+            # For sanity check
+            print(patient, week, rano, " -> this timepoint was not added")
+            continue
 
-        # Get label and calculate the logit
-        label=classes.index(rano)
+        # Calculate the logit
+        label = classes.index(rano)
         labels.append(label)
-        # Turn classes into logits
-        logits = func.one_hot(torch.tensor(label), num_classes=n_classes)
 
-        # Create dictionary to store the timepoint's images and its label
-        timepoint_dict= {"label": logits}
+        # Turn classes into logits
+        logits = torch.nn.functional.one_hot(torch.tensor(label), num_classes=n_classes)
+
+        # Create dictionary to store the timepoint's images and its label (and optionally the clinical data)
+        timepoint_dict = {"label": logits}
+        if clinical_data:
+            clinical = get_clinical_data(patient, data_dir) + [time_elapsed]
+            timepoint_dict["clinical"] = torch.tensor(clinical, dtype=torch.float)
 
         # Add modalities present to dictionary
-        available_mods = [mod for mod in ["CT1", "T1", "T2", "FLAIR"]
-                          if mod+".nii.gz" in os.listdir(timepoint_dir)]
+        available_mods = [mod for mod in ["CT1", "T1", "T2", "FLAIR"] if mod + ".nii.gz" in os.listdir(timepoint_dir)]
         for modality in available_mods:
-            timepoint_dict["image0_" + modality]=os.path.join(timepoint_dir,
-                                                              modality + ".nii.gz")
-            timepoint_dict["image-1_" + modality]=os.path.join(timepoint_dir,
-                                                               modality + "_T-1.nii.gz")
+            timepoint_dict["image0_" + modality] = os.path.join(timepoint_dir, modality + ".nii.gz")
+            timepoint_dict["image-1_" + modality] = os.path.join(timepoint_dir, modality + "_T-1.nii.gz")
 
         # Append dictionary to data
         data.append(timepoint_dict)
@@ -451,8 +480,8 @@ def get_data_and_transforms(data_dir, table_all, classes, subtract):
     image_key_list = [key for key in data[0].keys() if key.startswith('image')]
 
     # Calculate how many channels will be needed according to the dataset in use
-    dataset = os.path.basename(data_dir)
-    n_modalities=len(dataset.split("_"))-2
+    available_mods = os.path.basename(data_dir)[5:-4].split("_")
+    n_modalities = len(available_mods)
 
     # Define if we want to subtract the images in each modality
     if subtract:
@@ -685,8 +714,8 @@ def pretrain(model, pretrain_option, device, logs_folder, main_dir, num_channels
 
 def create_tensorboard(n_epochs, bs, learning_rate, logs_folder,
                        device, model_name, dataset, subtract, weight_decay,
-                       weight, loss_function, stop_decrease, decrease_LR, sampler_weight, dec_LR_factor, fold):
-    
+                       weight, loss_function, decrease_LR, sampler_weight, dec_LR_factor, fold):
+
     """This function generates a tensorboard folder to keep the evolution of the model training
 
     Args:

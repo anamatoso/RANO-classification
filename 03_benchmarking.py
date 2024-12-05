@@ -16,6 +16,7 @@ from utils import (convert2binary, create_tensorboard, get_data_and_transforms,
                    get_loaders, get_model_setup, init_weights, test, pretrain, train)
 
 CUDA = torch.cuda.is_available()
+DEVICE = torch.device("cuda" if CUDA else "cpu")
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 torch.cuda.empty_cache()
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -43,7 +44,7 @@ def validate_mods_keep(mods):
                                          "Write another set, perhaps in a different order")
     return mods.split(",")
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Argument parser
 
     Returns:
@@ -126,16 +127,14 @@ if __name__ == '__main__':
 
     # Create the data, get the transforms, the number of channels and the labels
     data,  transforms_train, transforms_test, \
-        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFIABLE, CLASSES, SUBTRACT)
+        num_channels, labels = get_data_and_transforms(DATA_DIR, TABLE_CLASSIFIABLE, CLASSES, SUBTRACT, CLINICAL_DATA)
 
     if CONVERT_BIN:
         data, labels, CLASSES, NUM_CLASSES, dataset = convert2binary(data, labels, DATASET)
 
     # Divide data into train and test set and create each data loader
     print("Creating train and validation datasets...")
-    folds = monai.data.utils.partition_dataset_classes(data, labels,
-                                                       num_partitions = arguments.n_folds,
-                                                       seed = SEED)
+    folds = monai.data.utils.partition_dataset_classes(data, labels, num_partitions = arguments.n_folds, seed = SEED)
 
     # Create folds
     for fold in range(arguments.n_folds):
@@ -143,8 +142,6 @@ if __name__ == '__main__':
         class_prevalence, train_loader, test_loader = get_loaders(CLASSES, BS,
                                                                   SAMPLER_WEIGHT, transforms_train,
                                                                   transforms_test, fold, folds)
-
-        DEVICE = torch.device("cuda" if CUDA else "cpu")
         print("Creating model...")
         MODEL_CONFIG, model, WEIGHT, OPTIMIZER, LOSS_FUNCTION = get_model_setup(MODEL_NAME,
                                                                                 class_prevalence,

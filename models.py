@@ -54,6 +54,225 @@ class AlexNet3D(nn.Module):
         x = self.classifier(x)
         return x
 
+
+# ResNet
+def conv3x3x3(in_planes, out_planes, stride=1, dilation=1):
+    # 3x3x3 convolution with padding
+    return nn.Conv3d(
+        in_planes,
+        out_planes,
+        kernel_size=3,
+        dilation=dilation,
+        stride=stride,
+        padding=dilation,
+        bias=False)
+
+def downsample_basic_block(x, planes, stride, no_cuda=False):
+    out = func.avg_pool3d(x, kernel_size=1, stride=stride)
+    zero_pads = torch.Tensor(
+        out.size(0), planes - out.size(1), out.size(2), out.size(3),
+        out.size(4)).zero_()
+    if not no_cuda:
+        if isinstance(out.data, torch.cuda.FloatTensor):
+            zero_pads = zero_pads.cuda()
+
+    out = Variable(torch.cat([out.data, zero_pads], dim=1))
+
+    return out
+
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
+        super(BasicBlock, self).__init__()
+        self.conv1 = conv3x3x3(inplanes, planes, stride=stride, dilation=dilation)
+        self.bn1 = nn.BatchNorm3d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3x3(planes, planes, dilation=dilation)
+        self.bn2 = nn.BatchNorm3d(planes)
+        self.downsample = downsample
+        self.stride = stride
+        self.dilation = dilation
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
+        super(Bottleneck, self).__init__()
+        self.conv1 = nn.Conv3d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm3d(planes)
+        self.conv2 = nn.Conv3d(
+            planes, planes, kernel_size=3, stride=stride, dilation=dilation, padding=dilation, bias=False)
+        self.bn2 = nn.BatchNorm3d(planes)
+        self.conv3 = nn.Conv3d(planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm3d(planes * 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+        self.dilation = dilation
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+class ResNet(nn.Module):
+
+    def __init__(self,
+                 block,
+                 layers,
+                 sample_input_D,
+                 sample_input_H,
+                 sample_input_W,
+                 num_seg_classes,
+                 shortcut_type='B',
+                 no_cuda=False):
+        self.sample_input_W = sample_input_W
+        self.sample_input_H = sample_input_H
+        self.sample_input_D = sample_input_D
+        self.inplanes = 64
+        self.no_cuda = no_cuda
+        super(ResNet, self).__init__()
+        self.conv1 = nn.Conv3d(
+            1,
+            64,
+            kernel_size=7,
+            stride=(2, 2, 2),
+            padding=(3, 3, 3),
+            bias=False)
+
+        self.bn1 = nn.BatchNorm3d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool3d(kernel_size=(3, 3, 3), stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0], shortcut_type)
+        self.layer2 = self._make_layer(
+            block, 128, layers[1], shortcut_type, stride=2)
+        self.layer3 = self._make_layer(
+            block, 256, layers[2], shortcut_type, stride=1, dilation=2)
+        self.layer4 = self._make_layer(
+            block, 512, layers[3], shortcut_type, stride=1, dilation=4)
+
+        self.conv_seg = nn.Sequential(
+            nn.ConvTranspose3d(
+                512 * block.expansion,
+                32,
+                2,
+                stride=2
+            ),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(
+                32,
+                32,
+                kernel_size=3,
+                stride=(1, 1, 1),
+                padding=(1, 1, 1),
+                bias=False),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(
+                32,
+                num_seg_classes,
+                kernel_size=1,
+                stride=(1, 1, 1),
+                bias=False)
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Conv3d(4, 1, kernel_size=4, stride=2, padding=1, bias=False),  # 4 x 30 x 30 x 20
+            nn.ReLU(),
+            nn.AvgPool3d(kernel_size=2),  # 1 x 15 x 15 x 10
+            nn.Flatten(),
+            nn.Linear(2250, num_seg_classes))
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                m.weight = nn.init.kaiming_normal_(m.weight, mode='fan_out')
+            elif isinstance(m, nn.BatchNorm3d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def _make_layer(self, block, planes, blocks, shortcut_type, stride=1, dilation=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            if shortcut_type == 'A':
+                downsample = partial(
+                    downsample_basic_block,
+                    planes=planes * block.expansion,
+                    stride=stride,
+                    no_cuda=self.no_cuda)
+            else:
+                downsample = nn.Sequential(
+                    nn.Conv3d(
+                        self.inplanes,
+                        planes * block.expansion,
+                        kernel_size=1,
+                        stride=stride,
+                        bias=False), nn.BatchNorm3d(planes * block.expansion))
+
+        layers = [block(self.inplanes, planes, stride=stride, dilation=dilation, downsample=downsample)]
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes, dilation=dilation))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.conv_seg(x)
+        x = self.classifier(x)
+
+        return x
+
+def resnet18(**kwargs):
+    """Constructs a ResNet-18 model.
+    """
+    model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
+    return model
+
+
+# Densenet with clinical data as input
 class DenseNetWithClinical(nn.Module):
     def __init__(self, densenet_model, num_classes, clinical_data_dim, hidden_dim=256):
         super(DenseNetWithClinical, self).__init__()
@@ -89,102 +308,3 @@ class DenseNetWithClinical(nn.Module):
         # Final classification layer
         output = self.final_fc(combined_features)
         return output
-    
-class Inception3DModule(nn.Module):
-    def __init__(self, in_channels, out1x1, red3x3, out3x3, red5x5, out5x5, pool_proj):
-        super(Inception3DModule, self).__init__()
-
-        # 1x1 Convolution
-        self.branch1x1 = nn.Conv3d(in_channels, out1x1, kernel_size=1)
-
-        # 1x1 Convolution followed by 3x3 Convolution
-        self.branch3x3 = nn.Sequential(
-            nn.Conv3d(in_channels, red3x3, kernel_size=1),
-            nn.Conv3d(red3x3, out3x3, kernel_size=3, padding=1)
-        )
-
-        # 1x1 Convolution followed by 5x5 Convolution
-        self.branch5x5 = nn.Sequential(
-            nn.Conv3d(in_channels, red5x5, kernel_size=1),
-            nn.Conv3d(red5x5, out5x5, kernel_size=5, padding=2)
-        )
-
-        # 3x3 Max Pooling followed by 1x1 Convolution
-        self.branch_pool = nn.Sequential(
-            nn.MaxPool3d(kernel_size=3, stride=1, padding=1),
-            nn.Conv3d(in_channels, pool_proj, kernel_size=1)
-        )
-
-    def forward(self, x):
-        branch1x1 = self.branch1x1(x)
-        branch3x3 = self.branch3x3(x)
-        branch5x5 = self.branch5x5(x)
-        branch_pool = self.branch_pool(x)
-
-        outputs = [branch1x1, branch3x3, branch5x5, branch_pool]
-        return torch.cat(outputs, 1)
-
-class GoogleNet3D(nn.Module):
-    def __init__(self, num_channels=2, num_classes=4):
-        super(GoogleNet3D, self).__init__()
-
-        # Initial Convolution
-        self.conv1_v2 = nn.Conv3d(num_channels, 64, kernel_size=7, stride=2, padding=3)#,groups=num_channels)
-        self.max_pool1 = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
-
-        # Inception Modules
-        self.inception1 = Inception3DModule(64, 64, 64, 128, 32, 32, 32)
-        self.inception2 = Inception3DModule(256, 128, 128, 192, 96, 96, 64)
-
-        # Downsample
-        self.max_pool2 = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
-
-        # Inception Modules
-        self.inception3 = Inception3DModule(480, 192, 96, 208, 16, 48, 64)
-        self.inception4 = Inception3DModule(512, 160, 112, 224, 24, 64, 64)
-        self.inception5 = Inception3DModule(512, 128, 128, 256, 24, 64, 64)
-        self.inception6 = Inception3DModule(512, 112, 144, 288, 32, 64, 64)
-        self.inception7 = Inception3DModule(528, 256, 160, 320, 32, 128, 128)
-
-        # Downsample
-        self.max_pool3 = nn.MaxPool3d(kernel_size=3, stride=2, padding=1)
-
-        # Inception Modules
-        self.inception8 = Inception3DModule(832, 256, 160, 320, 32, 128, 128)
-        self.inception9 = Inception3DModule(832, 384, 192, 384, 48, 128, 128)
-
-        # Global Average Pooling
-        self.avg_pool = nn.AdaptiveAvgPool3d(1)
-
-        # Fully Connected Layer
-        self.fc = nn.Linear(1024, num_classes)
-
-        # Softmax
-        # self.softmax = nn.Softmax(dim=1)
-
-    def forward(self, x):
-        x = func.relu(self.conv1_v2(x))
-        x = self.max_pool1(x)
-
-        x = self.inception1(x)
-        x = self.inception2(x)
-
-        x = self.max_pool2(x)
-
-        x = self.inception3(x)
-        x = self.inception4(x)
-        x = self.inception5(x)
-        x = self.inception6(x)
-        x = self.inception7(x)
-
-        x = self.max_pool3(x)
-
-        x = self.inception8(x)
-        x = self.inception9(x)
-
-        x = self.avg_pool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        # x = self.softmax(x)
-
-        return x
