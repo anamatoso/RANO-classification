@@ -18,6 +18,8 @@ First, clone the repository using:
 git clone https://github.com/anamatoso/RANO-classification.git
 ```
 
+Copy the LUMIERE folder into this folder.
+
 Then create a virtual environment, activate it, and install the requirements:
 ```bash
 python -m venv venv
@@ -35,7 +37,7 @@ Create an atlases folder:
 ```bash
 mkdir atlases
 ```
-and add the files `SRI24_T1_brain.nii` and `SRI24_T2_brain.nii` to that folder.
+and add the files of the SRI atlas, T1 and T2 - `SRI24_T1_brain.nii` and `SRI24_T2_brain.nii` - to that folder.
 
 ### 3. Run Preprocessing and Organization
 
@@ -47,7 +49,7 @@ python ./02_organize_data.py
 
 ### 4. Run Benchmarking Script
 
-Before runing the `03_benchmarking.py` file you must add a transform class to the monai package.
+Before running the `03_benchmarking.py` file you must add a transform class to the monai package.
 
 Add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
