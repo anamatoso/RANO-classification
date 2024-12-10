@@ -25,10 +25,11 @@ python -m venv venv
 source ./venv/bin/activate
 pip install -r requirements.txt
 ```
+Check whether the packages were indeed installed using `pip list`. If not use `python3 -m pip install -r requirements.txt`.
 
 ### 1. Organize data Script
 
-In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
+In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra space after "Post-Op". Additionally, change the "Date" header to "Timepoint"
 
 
 ### 2. Run Preprocessing and Organization
