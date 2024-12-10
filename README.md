@@ -6,9 +6,8 @@ It includes scripts for preprocessing and organizing of the data from the LUMIER
 ## Table of Contents <!-- omit from toc -->
 - [How to use](#how-to-use)
   - [1. Organize data Script](#1-organize-data-script)
-  - [2. Create atlases folder](#2-create-atlases-folder)
-  - [3. Run Preprocessing and Organization](#3-run-preprocessing-and-organization)
-  - [4. Run Benchmarking Script](#4-run-benchmarking-script)
+  - [2. Run Preprocessing and Organization](#2-run-preprocessing-and-organization)
+  - [3. Run Benchmarking Script](#3-run-benchmarking-script)
 
 
 ## How to use
@@ -31,15 +30,8 @@ pip install -r requirements.txt
 
 In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra comma after "Post-Op". Additionally, change the "Date" header to "Timepoint"
 
-### 2. Create atlases folder
-Create an atlases folder:
 
-```bash
-mkdir atlases
-```
-and add the files of the SRI atlas, T1 and T2 - `SRI24_T1_brain.nii` and `SRI24_T2_brain.nii` - to that folder.
-
-### 3. Run Preprocessing and Organization
+### 2. Run Preprocessing and Organization
 
 Run both the `01_preprocessing.py` and the `02_organize_data.py`:
 ```bash
@@ -47,7 +39,7 @@ python ./01_preprocessing.py
 python ./02_organize_data.py
 ```
 
-### 4. Run Benchmarking Script
+### 3. Run Benchmarking Script
 
 Before running the `03_benchmarking.py` file you must add a transform class to the monai package.
 
