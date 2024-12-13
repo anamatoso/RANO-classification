@@ -31,9 +31,18 @@ Check whether the packages were indeed installed using `pip list`. If not use `p
 
 In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra space after "Post-Op". Additionally, change the "Date" header to "Timepoint"
 
-### 3. Modify MONAI package
 
-Before running the any file you must add a transform class to the monai package.
+### 2. Run Preprocessing and Organization
+
+Run both the `01_preprocessing.py` and the `02_organize_data.py`:
+```bash
+python ./01_preprocessing.py
+python ./02_organize_data.py
+```
+
+### 3. Run Benchmarking Script
+
+Before running the `03_benchmarking.py` file you must add a transform class to the monai package.
 
 Add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
@@ -89,17 +98,8 @@ class SubtractItemsd(MapTransform):
             )
         return d
 ```
-
-### 2. Run Scripts
-
-Run the scripts: note that each might take a while.
-```bash
-python ./01_preprocessing.py
-python ./02_organize_data.py
-```
-
 Then you can run an experiment. An example of an experiment to run would be:
 
 ```bash
-python RANO_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --stop_decrease --mods_keep T1,T2,FLAIR
+python 03_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --stop_decrease --mods_keep T1,T2,FLAIR
 ```
