@@ -46,12 +46,13 @@ del name, images
 
 # Save table with classifiable timepoints
 CLASSIFIABLE = TABLE_ALL[
-    (TABLE_ALL['LessThan3Months'] == False) & # LessThan3Months must be False
-    (TABLE_ALL['RANO'] != "Pre-Op") &         # RANO must not be "Pre-Op"
-    (TABLE_ALL['RANO'] != "Post-Op") &        # RANO must not be "Post-Op"
-    (TABLE_ALL['RANO'] is not False) &        # RANO must not be False
-    (TABLE_ALL['RANO'] != "Post-Op/PD") &     # RANO must not be "Post-Op/PD"
-    (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False)) # RatingRationale must not contain "RANO"
+    (TABLE_ALL['LessThan3Months'] == False) &                       # LessThan3Months must be False
+    (TABLE_ALL['RANO'] != "Pre-Op") &                               # RANO must not be "Pre-Op"
+    (TABLE_ALL['RANO'] != "Post-Op") &                              # RANO must not be "Post-Op"
+    (TABLE_ALL['RANO'] != False) &                                  # RANO must not be False
+    (TABLE_ALL['RANO'] != "Post-Op/PD") &                           # RANO must not be "Post-Op/PD"
+    (~TABLE_ALL['RatingRationale'].str.contains("3 months", na=False)) &
+    (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False))  # RatingRationale must not contain "RANO"
 ]
 CLASSIFIABLE.to_pickle('./table_classifiable.pkl')
 
