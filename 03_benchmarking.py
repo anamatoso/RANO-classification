@@ -100,7 +100,7 @@ if __name__ == '__main__':
     CLASSES        = ["PD", "SD", "PR", "CR"]
     NUM_CLASSES    = len(CLASSES)
     LOGS_FOLDER    = "./Pytorch_Logs"
-    DATA_DIR       = os.path.join("./LUMIERE/Imaging", DATASET)
+    DATA_DIR       = os.path.join(MAIN_DIR,"Datasets", DATASET)
     MODEL_NAME     = arguments.model_name
     BS             = arguments.batch_size
     N_EPOCHS       = arguments.n_epochs

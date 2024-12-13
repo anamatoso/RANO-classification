@@ -8,22 +8,26 @@ import pandas as pd
 from utils import (check_files_in_subdirectories, create_count_column,
                    remove_timepoints_rano)
 
-DATA_DIR = "./LUMIERE/Imaging"
-DATASETS =  [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"], 
-             ["T1","T2","FLAIR"],["T1","FLAIR"]]
+MAIN_DIR    = os.getcwd()
+LUMIERE_DIR = os.path.join(MAIN_DIR, "LUMIERE")
+DATA_DIR    = os.path.join(MAIN_DIR, "LUMIERE", "Imaging")
+DATASETS    =  [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"], 
+                ["T1","T2","FLAIR"],["T1","FLAIR"]]
 #%% Load data - create table all
 
 # Import CSVs
-TABLE_RANO = pd.read_csv("./LUMIERE/LUMIERE-ExpertRating-v202211.csv",
+print("Importing csvs")
+TABLE_RANO = pd.read_csv(os.path.join(LUMIERE_DIR,"LUMIERE-ExpertRating-v202211.csv"),
                          delimiter = ",",header = 0)
-TABLE_COMPLETENESS = pd.read_csv("./LUMIERE/LUMIERE-datacompleteness.csv",
+TABLE_COMPLETENESS = pd.read_csv(os.path.join(LUMIERE_DIR,"LUMIERE-datacompleteness.csv"),
                                  delimiter = ",",header = 0)
-TABLE_ALL = TABLE_RANO.merge(TABLE_COMPLETENESS,on = ["Patient", "Timepoint"],how = "outer")
+TABLE_ALL = TABLE_RANO.merge(TABLE_COMPLETENESS,on = ["Patient","Timepoint"],how = "outer")
 del TABLE_RANO, TABLE_COMPLETENESS
 
 # Replace crosses and empty with true/false
-for column in ["LessThan3Months","Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)",
-               "NonMeasurableLesions","Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)",
+print("Transforming data to boolean")
+for column in ["LessThan3Months","RANO",
+               "NonMeasurableLesions","RatingRationale",
                 "CT1", "T1", "T2", "FLAIR", "DeepBraTumIA", "HD-GLIO-AUTO",
                "DeepBraTumIA-CoLlAGe","HD-GLIO-AUTO-CoLlAGe"]:  
     TABLE_ALL[column] = TABLE_ALL[column].replace({'x': True, '': False, 'NaN': False, None: False})
@@ -52,8 +56,8 @@ CLASSIFIABLE = TABLE_ALL[
 CLASSIFIABLE.to_pickle('./table_classifiable.pkl')
 
 #%% Create datasets with classifiable data
-
-DATASETS_DIR = "./Datasets"
+print("Creating dataset folders with links to images")
+DATASETS_DIR = os.path.join(MAIN_DIR,"Datasets")
 
 for images_to_count in DATASETS:
     mods_to_count = "_".join(images_to_count)
