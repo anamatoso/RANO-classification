@@ -79,9 +79,13 @@ for images_to_count in DATASETS:
     sub.call(["rm", "-rf", os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1")])
     count = 0
     for ind in table_classifiable.index[::-1]: #this index is the same as in table all
-        count += 1
         path = os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1",
                             table_classifiable["Patient"][ind] + "_" + table_classifiable["Timepoint"][ind])
+        
+        if os.path.exists(path): # There is one patient that for one timepoint, has 2 different RANO labels.
+            print(path + " already exists. So it won't be copied again.")
+            continue
+        count += 1
         os.makedirs(path, exist_ok = True)
 
         for mod in images_to_count:
