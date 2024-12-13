@@ -39,12 +39,14 @@ TABLE_ALL.reset_index(drop=True, inplace=True)
 
 # Create columns for knowing how many past images each timepoint 
 # has (aggregated by groups of images)
+print("Creating columns to know how many past images are there in each timepoint")
 for images in DATASETS:
     name = "_".join(images) + "_count"
     create_count_column(TABLE_ALL, images, name)
 del name, images
 
 # Save table with classifiable timepoints
+print("Creating table with classifiable timepoints")
 CLASSIFIABLE = TABLE_ALL[
     (TABLE_ALL['LessThan3Months'] == False) &                       # LessThan3Months must be False
     (TABLE_ALL['RANO'] != "Pre-Op") &                               # RANO must not be "Pre-Op"
