@@ -134,14 +134,14 @@ if __name__ == '__main__':
 
     # Divide data into train and test set and create each data loader
     print("Creating train and validation datasets...")
-    folds = monai.data.utils.partition_dataset_classes(data, labels, num_partitions = arguments.n_folds, seed = SEED)
+    FOLDS = monai.data.utils.partition_dataset_classes(data, labels, num_partitions = arguments.n_folds, seed = SEED)
 
     # Create folds
     for fold in range(arguments.n_folds):
         print("Creating loaders...")
         class_prevalence, train_loader, test_loader = get_loaders(CLASSES, BS,
                                                                   SAMPLER_WEIGHT, transforms_train,
-                                                                  transforms_test, fold, folds)
+                                                                  transforms_test, fold, FOLDS)
         print("Creating model...")
         MODEL_CONFIG, model, WEIGHT, OPTIMIZER, LOSS_FUNCTION = get_model_setup(MODEL_NAME,
                                                                                 class_prevalence,
