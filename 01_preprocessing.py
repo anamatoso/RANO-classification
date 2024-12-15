@@ -57,7 +57,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         chosen_mod = None
         for mod in available_mods:
             # If isotropic, select right away
-            if (resolutions[available_mods.index(mod)]==[1,1,1]).all():
+            if resolutions[available_mods.index(mod)]==[1, 1, 1]:
                 chosen_mod = mod
                 break # Break cycle because we found the best one
 
