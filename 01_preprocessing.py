@@ -37,7 +37,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         print("Processing "+patient+", "+week)
         w_dir = os.path.join(p_dir,week)
 
-        # List the modalities the timepoint has and their resolutions
+        # List the modalities the time point has and their resolutions
         available_mods = [item for item in MODALITIES if item+".nii.gz" in os.listdir(w_dir)]
         resolutions=[get_resolution(os.path.join(w_dir,item+".nii.gz")) for item in available_mods]
 
@@ -57,7 +57,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         chosen_mod = None
         for mod in available_mods:
             # If isotropic, select right away
-            if (resolutions[available_mods.index(mod)]==[1,1,1]).all():
+            if resolutions[available_mods.index(mod)]==[1, 1, 1]:
                 chosen_mod = mod
                 break # Break cycle because we found the best one
 
@@ -105,7 +105,7 @@ for patient in [p for p in sorted(os.listdir(DATA_DIR))]:
         to_do.remove(chosen_mod)
 
         if len(to_do)==0:
-            continue # there are no other images so we can go on to the next timepoint
+            continue # there are no other images so we can go on to the next time point
 
         # Iterate through the rest of the images to be transformed
         print("Registering other images to the main image and then to standard space")
