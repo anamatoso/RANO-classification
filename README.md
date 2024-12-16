@@ -5,9 +5,10 @@ It includes scripts for preprocessing and organizing of the data from the LUMIER
 
 ## Table of Contents <!-- omit from toc -->
 - [How to use](#how-to-use)
-  - [1. Organize data Script](#1-organize-data-script)
+  - [1. Alter CSV and python package](#1-alter-csv-and-python-package)
   - [2. Run Preprocessing and Organization](#2-run-preprocessing-and-organization)
   - [3. Run Benchmarking Script](#3-run-benchmarking-script)
+  - [4. Run Explainability Script](#4-run-explainability-script)
 
 
 ## How to use
@@ -27,24 +28,11 @@ pip install -r requirements.txt
 ```
 Check whether the packages were indeed installed using `pip list`. If not use `python3 -m pip install -r requirements.txt`.
 
-### 1. Organize data Script
+### 1. Alter CSV and python package
 
-In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra space after "Post-Op". Additionally, change the "Date" header to "Timepoint"
+In the `LUMIERE-ExpertRating-v202211.csv` file in `line 172`, `line 578` and in `line 613` delete the extra space after "Post-Op". Additionally, change the "Date" header to "Timepoint", the "Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)" to "RANO" and the "Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)" to "RatingRationale". The header should not have inverted commas.
 
-
-### 2. Run Preprocessing and Organization
-
-Run both the `01_preprocessing.py` and the `02_organize_data.py`:
-```bash
-python ./01_preprocessing.py
-python ./02_organize_data.py
-```
-
-### 3. Run Benchmarking Script
-
-Before running the `03_benchmarking.py` file you must add a transform class to the monai package.
-
-Add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.8) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python3.8/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
+Then, add the following transformation to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/utility/dictionary.py` (replace [VERSION] with the one you're using, in my case it was 3.9) in `line 926` and add its name (`SubtractItemsd`) to `line 159`. Additionally, add its name also to the file `./venv/lib/python[VERSION]/site-packages/monai/transforms/__init__.py` in `line 622` so that the package is aware of it.
 
 ```python
 class SubtractItemsd(MapTransform):
@@ -98,8 +86,27 @@ class SubtractItemsd(MapTransform):
             )
         return d
 ```
+
+### 2. Run Preprocessing and Organization
+
+Run both the `01_preprocessing.py` and the `02_organize_data.py`:
+```bash
+python ./01_preprocessing.py
+python ./02_organize_data.py
+```
+
+### 3. Run Benchmarking Script
+
+Before running the `03_benchmarking.py` file you must add a transform class to the monai package.
+
 Then you can run an experiment. An example of an experiment to run would be:
 
 ```bash
-python 03_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --stop_decrease --mods_keep T1,T2,FLAIR
+python 03_benchmarking.py --model_name monai_densenet264 --n_epochs 100 --decrease_LR --mods_keep T1,T2,FLAIR
 ```
+
+### 4. Run Explainability Script
+
+The explainability script must be run as a jupyter notebook, with cells.
+
+In the first run (which will be for class 0), run every cell except the "Select class" cell in order. Then for classes 1 until 3, run from the cell "Select class" onwards, one time for each class.
