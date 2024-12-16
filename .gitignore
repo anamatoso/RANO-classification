@@ -164,4 +164,4 @@ cython_debug/
 LUMIERE
 *.pkl
 Datasets/
-table_classifiable.pkl
+Pytorch_Logs/
