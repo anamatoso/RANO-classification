@@ -540,9 +540,6 @@ def get_loaders(classes, bs, sampler_weight, transforms_train, transforms_test, 
     train_data_unflattened = folds[0:i]+folds[i+1:]
     train_data = [x for xs in train_data_unflattened for x in xs]
     test_data = folds[i]
-    
-    print(len(train_data))
-    print(len(test_data))
 
     # Define class prevalence
     element_counts = [0.]*len(classes)
