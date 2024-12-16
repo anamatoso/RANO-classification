@@ -8,22 +8,26 @@ import pandas as pd
 from utils import (check_files_in_subdirectories, create_count_column,
                    remove_timepoints_rano)
 
-DATA_DIR = "./LUMIERE/Imaging"
-DATASETS =  [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"], 
-             ["T1","T2","FLAIR"],["T1","FLAIR"]]
+MAIN_DIR    = os.getcwd()
+LUMIERE_DIR = os.path.join(MAIN_DIR, "LUMIERE")
+DATA_DIR    = os.path.join(MAIN_DIR, "LUMIERE", "Imaging")
+DATASETS    =  [["CT1"],["CT1","FLAIR"],["CT1","T1","T2","FLAIR"], 
+                ["T1","T2","FLAIR"],["T1","FLAIR"]]
 #%% Load data - create table all
 
 # Import CSVs
-TABLE_RANO = pd.read_csv("./LUMIERE/LUMIERE-ExpertRating-v202211.csv",
+print("Importing csvs")
+TABLE_RANO = pd.read_csv(os.path.join(LUMIERE_DIR,"LUMIERE-ExpertRating-v202211.csv"),
                          delimiter = ",",header = 0)
-TABLE_COMPLETENESS = pd.read_csv("./LUMIERE/LUMIERE-datacompleteness.csv",
+TABLE_COMPLETENESS = pd.read_csv(os.path.join(LUMIERE_DIR,"LUMIERE-datacompleteness.csv"),
                                  delimiter = ",",header = 0)
-TABLE_ALL = TABLE_RANO.merge(TABLE_COMPLETENESS,on = ["Patient", "Timepoint"],how = "outer")
+TABLE_ALL = TABLE_RANO.merge(TABLE_COMPLETENESS,on = ["Patient","Timepoint"],how = "outer")
 del TABLE_RANO, TABLE_COMPLETENESS
 
 # Replace crosses and empty with true/false
-for column in ["LessThan3Months","Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)",
-               "NonMeasurableLesions","Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)",
+print("Transforming data to boolean")
+for column in ["LessThan3Months","RANO",
+               "NonMeasurableLesions","RatingRationale",
                 "CT1", "T1", "T2", "FLAIR", "DeepBraTumIA", "HD-GLIO-AUTO",
                "DeepBraTumIA-CoLlAGe","HD-GLIO-AUTO-CoLlAGe"]:  
     TABLE_ALL[column] = TABLE_ALL[column].replace({'x': True, '': False, 'NaN': False, None: False})
@@ -35,25 +39,28 @@ TABLE_ALL.reset_index(drop=True, inplace=True)
 
 # Create columns for knowing how many past images each timepoint 
 # has (aggregated by groups of images)
+print("Creating columns to know how many past images are there in each timepoint")
 for images in DATASETS:
     name = "_".join(images) + "_count"
     create_count_column(TABLE_ALL, images, name)
 del name, images
 
 # Save table with classifiable timepoints
+print("Creating table with classifiable timepoints")
 CLASSIFIABLE = TABLE_ALL[
-    (TABLE_ALL['LessThan3Months'] == False) & # LessThan3Months must be False
-    (TABLE_ALL['RANO'] != "Pre-Op") &         # RANO must not be "Pre-Op"
-    (TABLE_ALL['RANO'] != "Post-Op") &        # RANO must not be "Post-Op"
-    (TABLE_ALL['RANO'] is not False) &        # RANO must not be False
-    (TABLE_ALL['RANO'] != "Post-Op/PD") &     # RANO must not be "Post-Op/PD"
-    (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False)) # RatingRationale must not contain "RANO"
+    (TABLE_ALL['LessThan3Months'] == False) &                       # LessThan3Months must be False
+    (TABLE_ALL['RANO'] != "Pre-Op") &                               # RANO must not be "Pre-Op"
+    (TABLE_ALL['RANO'] != "Post-Op") &                              # RANO must not be "Post-Op"
+    (TABLE_ALL['RANO'] != False) &                                  # RANO must not be False
+    (TABLE_ALL['RANO'] != "Post-Op/PD") &                           # RANO must not be "Post-Op/PD"
+    (~TABLE_ALL['RatingRationale'].str.contains("3 months", na=False)) &
+    (~TABLE_ALL['RatingRationale'].str.contains("RANO", na=False))  # RatingRationale must not contain "RANO"
 ]
 CLASSIFIABLE.to_pickle('./table_classifiable.pkl')
 
 #%% Create datasets with classifiable data
-
-DATASETS_DIR = "./Datasets"
+print("Creating dataset folders with links to images")
+DATASETS_DIR = os.path.join(MAIN_DIR,"Datasets")
 
 for images_to_count in DATASETS:
     mods_to_count = "_".join(images_to_count)
@@ -72,9 +79,13 @@ for images_to_count in DATASETS:
     sub.call(["rm", "-rf", os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1")])
     count = 0
     for ind in table_classifiable.index[::-1]: #this index is the same as in table all
-        count += 1
         path = os.path.join(DATASETS_DIR, "rano_" + mods_to_count + "_T-1",
                             table_classifiable["Patient"][ind] + "_" + table_classifiable["Timepoint"][ind])
+        
+        if os.path.exists(path): # There is one patient that for one timepoint, has 2 different RANO labels.
+            print(path + " already exists. So it won't be copied again.")
+            continue
+        count += 1
         os.makedirs(path, exist_ok = True)
 
         for mod in images_to_count:
@@ -98,3 +109,5 @@ for images_to_count in DATASETS:
                                                           for im in images_to_count]
     check_files_in_subdirectories(os.path.join(DATASETS_DIR, "rano_"+mods_to_count+"_T-1"),
                                   file_list)
+
+# %%

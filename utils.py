@@ -323,17 +323,17 @@ def remove_timepoints_rano(table_all):
     to_delete=["Post-Op", "Pre-Op", False, "Post-Op/PD"]
     table_classifiable=table_all.copy(deep=True)
     for c in to_delete:
-        condition = table_classifiable["Rating (according to RANO, PD: Progressive disease, SD: Stable disease, PR: Partial response, CR: Complete response, Pre-Op: Pre-Operative, Post-Op: Post-Operative)"] == c
+        condition = (table_classifiable["RANO"] == c)
         table_classifiable.drop(table_classifiable[condition].index,inplace=True)
 
     # Remove rows where less than 3 months column is true
-    condition = table_classifiable['LessThan3Months'] == True
+    condition = (table_classifiable['LessThan3Months'] == True)
     table_classifiable.drop(table_classifiable[condition].index,inplace=True)
 
     # remove less than 3 months in the rationale column
     to_delete=["less than 3 months", "Less than 3 months", "Not a timepoint for RANO measurement"]
     for c in to_delete:
-        condition = table_classifiable['Rating rationale (CRET: complete resection of the enhancing tumor, PRET: partial resection of the enhancing tumor, T2-Progr.: T2-Progression, L: Lesion)'].str.startswith(c,na=False)
+        condition = table_classifiable['RatingRationale'].str.startswith(c,na=False)
         table_classifiable.drop(table_classifiable[condition].index,inplace=True)
     return table_classifiable
 
@@ -911,45 +911,6 @@ def train(log_dir, writer, train_loader, test_loader, model_name, dataset,
     os.remove(os.path.join(log_dir, "checkpoint" + ".pt"))
     writer.close()
 
-def critical_error(y_pred, y):
-    """This function calculated the probability of making  crucial error. 
-    A crucial error is either when the function predicts disease development (0 or 1) 
-    but it is actually response (2 or 3), or when it predicts response development, but
-    it is actually disease development
-
-    Args:
-        y_pred (tensor or list): Class prediction of the model. It is either a 
-        list or a tensor with the numbers corresponding to the predicted class of the model
-        y (tensor or list): Real value of classes. It is either a list or a 
-        tensor with the numbers corresponding to the real classes of the inputs.
-
-    Returns:
-        float: percentage of critical errors (0-1)
-    """
-    # Turn tensors into lists
-    if torch.is_tensor(y_pred):
-        y_pred = y_pred.tolist()
-    if torch.is_tensor(y):
-        y = y.tolist()
-
-    # Vectors must be the same length
-    assert len(y) == len(y_pred), "y_pred and y must be the same length"
-
-    # Count number of critical errors
-    count_errors = 0
-    for i,_ in enumerate(y):
-        value_y = y[i] + 1
-        value_ypred = y_pred[i] + 1
-
-        if value_y in (1, 2):
-            value_y *= -1
-        if value_ypred in (1, 2):
-            value_ypred *= -1
-
-        if value_ypred * value_y < 0:
-            count_errors += 1
-    return count_errors/len(y)
-
 def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model_name, clinical_data):
     """Function to test model
 
@@ -1009,14 +970,12 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     bal_accuracy = balanced_accuracy_score(real, predicted)
     accuracy = accuracy_score(real, predicted)
     F1_score = 2 * (precision * recall) / (precision + recall)
-    critical_err = critical_error(predicted, real)
 
     print("Balanced Accuracy    :", bal_accuracy)
     print("Accuracy             :", accuracy)
     print("F1-score             :", F1_score)
     print("Precision            :", precision)
     print("Recall               :", recall)
-    print("Critical Error Rate  :", critical_err)
 
     # Calculate ROC AUC
     roc_auc = compute_roc_auc(predicted_probs, real_onehot)
@@ -1030,8 +989,8 @@ def test(model_config, log_dir, dataset, device, bs, classes, test_loader, model
     "F1-score"              : str(F1_score),
     "Precision"             : str(precision),
     "Recall"                : str(recall),
-    "ROC AUC"               : str(roc_auc),
-    "Critical Error Rate"   : str(critical_err)}
+    "ROC AUC"               : str(roc_auc)}
+
     return result, real, predicted
 
 
