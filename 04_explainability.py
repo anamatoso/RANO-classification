@@ -58,7 +58,7 @@ DATA_DIR       = os.path.join(MAIN_DIR, "Datasets", DATASET)
 LOG_DIR        = os.path.join(LOGS_FOLDER, EXPERIMENT)
 
 if BINARY: # Change classes in case binary flag is set
-    classes=["P","NP"]
+    classes=["P", "NP"]
     num_classes=2
 
 #%% Create dataset to classify image types
@@ -123,7 +123,7 @@ print(input_item["label"])
 
 #%% Select class (do not run for first class and then from this section on for the other classes)
 
-while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change tensor for the classes 1, 2 and 3
+while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change tensor for the classes 1, 2 and 3.
     input_item = next(it)
     input_tensor = input_item["images"]
     print("batch loaded")
