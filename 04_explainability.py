@@ -29,40 +29,46 @@ torch.cuda.empty_cache()
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
 
-#%% Variables that can change
-PHD_DIR        = os.getcwd()
+#%% Define Variables
+MAIN_DIR        = os.getcwd()
 classes        = ["PD", "SD", "PR", "CR"]
 num_classes    = len(classes)
-LOGS_FOLDER    = os.path.join(PHD_DIR, "Pytorch_Logs")
+LOGS_FOLDER    = os.path.join(MAIN_DIR, "Pytorch_Logs")
 BS             = 1
 SEED           = 2
+
 set_determinism(SEED)
 
 # CHANGE FOR BEST EXPERIMENT
 EXPERIMENT     = "24-10-18_14.29.31"
-FOLD           = 1
 
-# Import csv
+# Import csv and get the best experiment parameters
 df = pd.read_csv('results.csv', header=None)
-row = df[df[0] == "Jul09_15-31-18_pluto"]
-experiment_list = row.iloc[0] # TODO Check what this is
+row = df[df[0] == EXPERIMENT] # Get row of the best performant experiment
+EXPERIMENT_LIST = row.iloc[0] # gets all the info on the experiment
 
-DATASET        = "rano_" + experiment_list[9]
-DATA_DIR       = os.path.join(PHD_DIR, "Datasets", DATASET) #TODO: confirmar diretoria
-SUBTRACT       = experiment_list[11]==True
-CLINICAL_DATA  = experiment_list[-1] == True
-MODEL_NAME     = experiment_list[15]
+BINARY         = EXPERIMENT_LIST[10] == True
+DATASET        = "rano_" + EXPERIMENT_LIST[9]
+FOLD           = EXPERIMENT_LIST[10]
+SUBTRACT       = EXPERIMENT_LIST[11] == True
+CLINICAL_DATA  = EXPERIMENT_LIST[20] == True
+MODEL_NAME     = EXPERIMENT_LIST[15]
 
+DATA_DIR       = os.path.join(MAIN_DIR, "Datasets", DATASET)
 LOG_DIR        = os.path.join(LOGS_FOLDER, EXPERIMENT)
+
+if BINARY: # Change classes in case binary flag is set
+    classes=["P","NP"]
+    num_classes=2
 
 #%% Create dataset to classify image types
 print("Getting data...")
 # Get table with data info
-with open(os.path.join(PHD_DIR, "table_classifiable.pkl"), "rb") as f:
-    CLASIFYABLE = pickle.load(f)
+with open(os.path.join(MAIN_DIR, "table_classifiable.pkl"), "rb") as f:
+    CLASSIFIABLE = pickle.load(f)
 
 # Create the data, get transforms and number of channels
-data,  _, transforms_test, num_channels, labels = get_data_and_transforms(DATA_DIR, CLASIFYABLE, classes, SUBTRACT, CLINICAL_DATA)
+data,  _, transforms_test, num_channels, labels = get_data_and_transforms(DATA_DIR, CLASSIFIABLE, classes, SUBTRACT, CLINICAL_DATA)
 
 #%% Divide data into train and test set and create data loader
 print("Creating train and validation datasets...")
@@ -117,7 +123,7 @@ print(input_item["label"])
 
 #%% Select class (do not run for first class and then from this section on for the other classes)
 
-while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change tensor for the classes 2 and 3
+while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change tensor for the classes 1, 2 and 3
     input_item = next(it)
     input_tensor = input_item["images"]
     print("batch loaded")
@@ -126,7 +132,7 @@ while not torch.equal(input_item["label"],torch.tensor([[0,1,0,0]])): # change t
 
 # %% GRAD-CAM
 outputs=model(input_tensor.to(DEVICE))
-class_pred = int(torch.max(outputs))
+class_pred = int(torch.argmax(outputs))
 class_real = int(torch.argmax(input_item["label"]))
 
 target_real = [ClassifierOutputTarget(class_real)]
@@ -141,13 +147,12 @@ with GradCAM(model=model, target_layers=target_layers) as cam:
     grayscale_cam_real = cam(input_tensor=input_tensor, targets = target_real)
     grayscale_cam_pred = cam(input_tensor=input_tensor, targets = target_pred)
 
-grayscale_cam_real = grayscale_cam_real[0, :]
-grayscale_cam_pred = grayscale_cam_pred[0, :]
+grayscale_cam_real, grayscale_cam_pred = grayscale_cam_real[0, :], grayscale_cam_pred[0, :]
 
 plot_saliency_grid(input_tensor[0,-3,:,:,:],grayscale_cam_real,
-                    overlay=True, cmap="jet", filename="images/final/grad-cam_c"+str(class_real)+".svg")
+                    overlay=True, cmap="jet", filename="images/grad-cam_c"+str(class_real)+".svg")
 plot_saliency_grid(input_tensor[0,-3,:,:,:],grayscale_cam_pred, 
-                    overlay=True, cmap="jet", filename="images/final/grad-cam_c"+str(class_real)+"_pred.svg")
+                    overlay=True, cmap="jet", filename="images/grad-cam_c"+str(class_real)+"_pred.svg")
 
 
 # %% Captum
@@ -180,7 +185,7 @@ for SLICE in slice_list[class_real]:
     plt.imshow(grads_real[0,channel,:, :, SLICE].T, cmap = 'gray', origin = 'lower',vmin=min_image,vmax=max_image, norm="log")
     plt.title(f'Axial Slice at z={SLICE}')
     plt.colorbar()
-    plt.savefig("images/final/saliency_c"+str(class_real)+"_s"+str(SLICE)+".svg", format="svg", dpi=500)
+    plt.savefig("images/saliency_c"+str(class_real)+"_s"+str(SLICE)+".svg", format="svg", dpi=500)
     plt.show()
 
     # Plot saliency maps for predicted class
@@ -190,5 +195,5 @@ for SLICE in slice_list[class_real]:
     plt.imshow(grads_pred[0,channel,:, :, SLICE].T, cmap = 'gray', origin = 'lower',vmin=min_image,vmax=max_image, norm="log")
     plt.title(f'Axial Slice at z={SLICE}')
     plt.colorbar()
-    plt.savefig("images/final/saliency_c"+str(class_real)+"_s"+str(SLICE)+"_pred.svg", format="svg", dpi=500)
+    plt.savefig("images/saliency_c"+str(class_real)+"_s"+str(SLICE)+"_pred.svg", format="svg", dpi=500)
     plt.show()
