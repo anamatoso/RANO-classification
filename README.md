@@ -1,6 +1,7 @@
 # RANO-classification <!-- omit from toc -->
 
-This repository contains the scripts used to classify the RANO criteria. 
+This repository contains the scripts used to classify the RANO criteria used in the following paper: [Towards a deep learning approach for classifying treatment response in glioblastomas](https://arxiv.org/abs/2504.18268)
+
 It includes scripts for preprocessing and organizing of the data from the LUMIERE dataset.
 
 ## Table of Contents <!-- omit from toc -->
